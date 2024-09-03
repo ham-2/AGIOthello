@@ -1,0 +1,7 @@
+check if storing lines is faster
+
+check if undo.del can be removed
+
+check if we can rotate Key
+
+check if we can get complete pv
