@@ -120,24 +120,38 @@ void Threadmgr::show(int i) {
 
 void Threadmgr::do_move(Square m) {
 	Undo* u = new Undo;
-	board->do_move(m, u);
+	board->do_move_wrap(m, u);
 	u->del = true;
 	for (int i = 0; i < threads.size(); i++) {
 		Undo* u = new Undo;
-		threads[i]->board->do_move(m, u);
+		threads[i]->board->do_move_wrap(m, u);
 		u->del = true;
 	}
 }
 
 void Threadmgr::undo_move(Square m) {
-	board->undo_move(m);
+	board->undo_move_wrap(m);
 	for (int i = 0; i < threads.size(); i++) {
-		threads[i]->board->undo_move(m);
+		threads[i]->board->undo_move_wrap(m);
 	}
 }
 
 void Threadmgr::test_eval() {
 	int endeval = eval(*board);
+
+	// Check if ended
+	MoveList ml;
+	ml.generate(*board);
+	if (ml.list == ml.end) {
+		Undo u;
+		board->do_null_move(&u);
+		ml.generate(*board);
+		if (ml.list == ml.end) {
+			endeval ^= EVAL_END;
+		}
+		board->undo_null_move();
+	}
+	
 	cout << endeval << " " << eval_print(endeval) << "\n";
 }
 

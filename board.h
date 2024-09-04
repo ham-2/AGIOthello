@@ -16,7 +16,7 @@ enum Square : int {
 	A6, B6, C6, D6, E6, F6, G6, H6,
 	A7, B7, C7, D7, E7, F7, G7, H7,
 	A8, B8, C8, D8, E8, F8, G8, H8,
-	SQ_END
+	SQ_END, NULL_MOVE, GAME_END
 };
 
 inline Square operator+(Square s, int i) { return Square(int(s) + i); }
@@ -56,6 +56,16 @@ inline int get_ldiag_idx(Square s) {
 }
 inline int get_rdiag_idx(Square s) {
 	return idx_rdiag[s];
+}
+
+inline Square swap_fr(Square s) { // file <-> rank
+	return Square(((s >> 3) | (s << 3)) & 63);
+}
+inline Square swap_lr(Square s) { // ldiag -> rank
+	return Square(0);
+}
+inline Square swap_rr(Square s) { // rdiag -> rank
+	return Square(0);
 }
 
 typedef uint64_t Bitboard;
@@ -143,36 +153,17 @@ inline Square pop_lsb(Bitboard* b) {
 	return s;
 }
 
-inline Bitboard shift(Bitboard b, int shift) {
-	switch (shift) {
-	case -9: {
-		return (b & ~FileBoard[0]) >> 9;
-	}
-	case -8: {
-		return b >> 8;
-	}
-	case -7: {
-		return (b & ~FileBoard[7]) >> 7;
-	}
-	case -1: {
-		return (b & ~FileBoard[0]) >> 1;
-	}
-	case 1: {
-		return (b & ~FileBoard[7]) << 1;
-	}
-	case 7: {
-		return (b & ~FileBoard[0]) << 7;
-	}
-	case 8: {
-		return b << 8;
-	}
-	case 9: {
-		return (b & ~FileBoard[7]) << 9;
-	}
-	default: {
-		return 0;
-	}
-	}
+template <int T>
+constexpr Bitboard shift(Bitboard b) {
+	return T == -9 ? (b & ~FileBoard[0]) >> 9
+		: T == -8 ? b >> 8
+		: T == -7 ? (b & ~FileBoard[7]) >> 7
+		: T == -1 ? (b & ~FileBoard[0]) >> 1
+		: T == 1 ? (b & ~FileBoard[7]) << 1
+		: T == 7 ? (b & ~FileBoard[0]) << 7
+		: T == 8 ? b << 8
+		: T == 9 ? (b & ~FileBoard[7]) << 9
+		: 0;
 }
 
 enum Color : bool { BLACK = false, WHITE = true };
@@ -187,6 +178,7 @@ inline char print_piece(Piece p) { return FEN_Pieces[p]; }
 bool parse_piece(char c, Piece& p);
 
 inline std::ostream& operator<<(std::ostream& os, Square s) {
+	if (s == NULL_MOVE) { return os << "00"; }
 	return os << char('a' + get_file(s)) << 1 + get_rank(s);
 }
 void print(std::ostream& os, Bitboard b);

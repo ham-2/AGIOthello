@@ -3,6 +3,7 @@
 
 #include <sstream>
 
+#include "search.h"
 #include "table.h"
 #include "threads.h"
 

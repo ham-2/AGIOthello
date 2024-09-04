@@ -62,7 +62,11 @@ public:
 	Bitboard get_occupied() { return ~pieces[EMPTY]; }
 	inline bool get_passed() { return undo_stack->pass; }
 
-	// functions for eval
+	// functions for movegen
+	inline uint16_t get_files(int i) { return files[i]; }
+	inline uint16_t get_ranks(int i) { return ranks[i]; }
+	inline uint16_t get_ldiags(int i) { return ldiags[i]; }
+	inline uint16_t get_rdiags(int i) { return rdiags[i]; }
 
 
 	void show();
@@ -71,6 +75,8 @@ public:
 	void undo_move(Square s);
 	void do_null_move(Undo* new_undo);
 	void undo_null_move();
+	void do_move_wrap(Square s, Undo* new_undo);
+	void undo_move_wrap(Square s);
 
 	Position& operator=(const Position board);
 

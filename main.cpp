@@ -141,6 +141,14 @@ int main() {
 			Threads.test_eval();
 		}
 
+		else if (word == "verify") {
+			Threads.board->verify();
+		}
+
+		else if (word == "solve") {
+			solve();
+		}
+
 	}
 
 	return 44;

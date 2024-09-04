@@ -62,9 +62,8 @@ void get_time(istringstream& ss, Color c, float& time, int& max_ply) {
 void search_start(Thread* t, float time, int max_ply)
 {
 	Threads.stop = false;
-		
-	int multipv_max = multipv;
-	Square bmove = SQ_END;
+
+	Square bmove = NULL_MOVE;
 	atomic<bool>* complete = new atomic<bool>;
 	*complete = false;
 	condition_variable* print_cond = new condition_variable;
@@ -87,8 +86,7 @@ void search_start(Thread* t, float time, int max_ply)
 
 	while (Threads.depth <= max_ply) {
 		alpha_beta(*board, &(Threads.stop),
-			Threads.depth, &probe,
-			board->get_side(), t->step);
+			Threads.depth, &probe, t->step);
 			
 		// Forced Stop
 		if (Threads.stop) { break; }
@@ -117,14 +115,14 @@ void search_start(Thread* t, float time, int max_ply)
 	// Print Bestmove
 	Main_TT.probe(board->get_key(), &probe);
 	Threads.acquire_cout();
-	cout << "bestmove " << probe.nmove << endl;		
+	cout << "bestmove " << probe.nmove << endl;
 	Threads.release_cout();
 
 	// Ponder
 	if (ponder_continue && !(stop_if_mate && is_mate(probe.eval)))
 	{
 		Threads.do_move(bmove);
-		Threads.depth.exchange(1);
+		//Threads.depth--;
 		Threads.stop = false;
 		ponder_continue = false;
 
@@ -137,8 +135,7 @@ void search_start(Thread* t, float time, int max_ply)
 		Main_TT.probe(board->get_key(), &probe_ponder);
 		while (Threads.depth <= max_ply && !Threads.stop) {
 			alpha_beta(*board, &(Threads.stop),
-				Threads.depth, &probe_ponder,
-				~(board->get_side()), t->step);
+				Threads.depth, &probe_ponder, t->step);
 
 			Main_TT.probe(board->get_key(), &probe_ponder);
 			++Threads.depth;

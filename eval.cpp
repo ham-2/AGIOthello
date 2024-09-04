@@ -16,12 +16,9 @@ int eval(Position& board) {
 
 	int score = 0;
 
-	score += board.get_side() ?
-		(board.get_count(WHITE_P) - board.get_count(BLACK_P)) << 23 :
-		(board.get_count(BLACK_P) - board.get_count(WHITE_P)) << 23;
+	score += get_material(board);
 
-	score += ((rng.get() & 255) << 11) + ((rng.get() & 255) << 11)
-		+ ((rng.get() & 255) << 11) + ((rng.get() & 255) << 11);
+	score += ((rng.get() & 255) << 12) + ((rng.get() & 255) << 12);
 
 	return score;
 }

@@ -23,7 +23,12 @@ constexpr int EVAL_INIT = EVAL_MIN - 1;
 
 int eval(Position& board);
 
-inline bool is_mate(int eval) { return eval >= EVAL_END || eval < -EVAL_END; }
+inline bool is_mate(int eval) { return eval > EVAL_END || eval < -EVAL_END; }
+inline int get_material(Position& board) {
+	return board.get_side() ?
+		(board.get_count(WHITE_P) - board.get_count(BLACK_P)) << 23 :
+		(board.get_count(BLACK_P) - board.get_count(WHITE_P)) << 23;
+}
 
 string eval_print(int eval);
 

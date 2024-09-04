@@ -3,21 +3,99 @@
 void MoveList::generate(Position& board) {
 	Square* list_ptr = list;
 	Piece p = board.get_side() ? WHITE_P : BLACK_P;
+	
+	// Rays Lookup
+	/*Bitboard moves = EmptyBoard;
+		
+	int idx = 0;
+	uint16_t ray = 0;
+	for (int file = 0; file < 8; file++) {
+		ray = board.get_files(file);
+		idx = board.get_side() ? ray ^ (ray >> 8) : ray;
+		
+		moves |= to_file(Captures[idx], file);
+	}
+	for (int rank = 0; rank < 8; rank++) {
+		ray = board.get_ranks(rank);
+		idx = board.get_side() ? ray ^ (ray >> 8) : ray;
 
+		moves |= to_rank(Captures[idx], rank);
+	}
+	for (int ldiag = 0; ldiag < 15; ldiag++) {
+		ray = board.get_ldiags(ldiag);
+		idx = board.get_side() ? ray ^ (ray >> 8) : ray;
+
+		moves |= to_ldiag(Captures[idx], ldiag);
+	}
+	for (int rdiag = 0; rdiag < 15; rdiag++) {
+		ray = board.get_rdiags(rdiag);
+		idx = board.get_side() ? ray ^ (ray >> 8) : ray;
+
+		moves |= to_rdiag(Captures[idx], rdiag);
+	}*/
+
+	// Bitboard Method
 	Bitboard cand = EmptyBoard;
 	Bitboard moves = EmptyBoard;
 	Bitboard us = board.get_pieces(p);
 	Bitboard them = board.get_pieces(~p);
 	Bitboard empty = board.get_pieces(EMPTY);
 
-	for (int dir : { -9, -8, -7, -1, 1, 7, 8, 9 }) {
-		cand = us;
-		cand = shift(cand, dir) & them;
-		for (int i = 0; i < 6; i++) {
-			cand = shift(cand, dir);
-			moves |= cand & empty;
-			cand &= them;
-		}
+	cand = us;
+	cand = shift<-9>(cand) & them;
+	for (int i = 0; i < 6; i++) {
+		cand = shift<-9>(cand);
+		moves |= cand & empty;
+		cand &= them;
+	}
+	cand = us;
+	cand = shift<-8>(cand) & them;
+	for (int i = 0; i < 6; i++) {
+		cand = shift<-8>(cand);
+		moves |= cand & empty;
+		cand &= them;
+	}
+	cand = us;
+	cand = shift<-7>(cand) & them;
+	for (int i = 0; i < 6; i++) {
+		cand = shift<-7>(cand);
+		moves |= cand & empty;
+		cand &= them;
+	}
+	cand = us;
+	cand = shift<-1>(cand) & them;
+	for (int i = 0; i < 6; i++) {
+		cand = shift<-1>(cand);
+		moves |= cand & empty;
+		cand &= them;
+	}
+	cand = us;
+	cand = shift<1>(cand) & them;
+	for (int i = 0; i < 6; i++) {
+		cand = shift<1>(cand);
+		moves |= cand & empty;
+		cand &= them;
+	}
+	cand = us;
+	cand = shift<7>(cand) & them;
+	for (int i = 0; i < 6; i++) {
+		cand = shift<7>(cand);
+		moves |= cand & empty;
+		cand &= them;
+	}
+	cand = us;
+	cand = shift<8>(cand) & them;
+	for (int i = 0; i < 6; i++) {
+		cand = shift<8>(cand);
+		moves |= cand & empty;
+		cand &= them;
+	}
+	cand = us;
+	cand = shift<9>(cand) & them;
+	for (int i = 0; i < 6; i++) {
+		cand = shift<9>(cand);
+		moves |= cand & empty;
+		cand &= them;
 	}
 
 	b = moves;

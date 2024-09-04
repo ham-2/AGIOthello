@@ -1,21 +1,6 @@
 #include "printer.h"
 
-#include <sstream>
-
 using namespace std;
-
-void getpv(ostream& os, Position* board, int& depth) {
-	string pv;
-	TTEntry probe = {};
-	if (Main_TT.probe(board->get_key(), &probe) == 0) {
-		Undo u;
-		board->do_move(probe.nmove, &u);
-		os << probe.nmove << " ";
-		depth++;
-		getpv(os, board, depth);
-		board->undo_move(probe.nmove);
-	}
-}
 
 void printer(float time, atomic<bool>* stop, condition_variable* cv)
 {
@@ -24,7 +9,7 @@ void printer(float time, atomic<bool>* stop, condition_variable* cv)
 	system_clock::time_point time_start = system_clock::now();
 	milliseconds search_time = milliseconds(0);
 	system_clock::time_point time_now;
-	Square bmove = SQ_END;
+	Square bmove = NULL_MOVE;
 	int score = 0;
 	int max_depth = 0;
 	int currdepth;

@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <iostream>
 #include <mutex>
+#include <sstream>
 
 #include "board.h"
 #include "eval.h"

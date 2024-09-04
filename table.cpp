@@ -62,24 +62,13 @@ int TT::probe(Key key, TTEntry* probe) {
 void TT::register_entry(Key key, int depth, int eval, Square move) {
 	TTEntry* entry_ptr = table + (key & SIZE_NUM);
 	entry_ptr->m.lock();
-	if (entry_ptr->key == key) {
-		if (// Only write if depth is higher
-			(depth >= entry_ptr->depth)) {
-			entry_ptr->depth = depth;
-			entry_ptr->eval = eval;
-			entry_ptr->nmove = move;
-			entry_ptr->table_sn = tt_sn;
-		}
-	}
-	else { // Different key
-		if (depth >= entry_ptr->depth ||
-			tt_sn > entry_ptr->table_sn + 1) {
-			entry_ptr->key = key;
-			entry_ptr->depth = depth;
-			entry_ptr->eval = eval;
-			entry_ptr->nmove = move;
-			entry_ptr->table_sn = tt_sn;
-		}
+	if (depth >= entry_ptr->depth ||
+		tt_sn > entry_ptr->table_sn) {
+		entry_ptr->key = key;
+		entry_ptr->depth = depth;
+		entry_ptr->eval = eval;
+		entry_ptr->nmove = move;
+		entry_ptr->table_sn = tt_sn;
 	}
 	entry_ptr->m.unlock();
 	return;
@@ -126,4 +115,18 @@ void TT::change_size(size_t new_size) {
 	TT_LENGTH = TT_MB_SIZE * 1024 * 1024 / sizeof(TTEntry);
 	SIZE_NUM = (uint64_t)(TT::TT_LENGTH - 1);
 	table = static_cast<TTEntry*>(table_malloc(TT_LENGTH * sizeof(TTEntry)));
+}
+
+void getpv(ostream& os, Position* board, int& depth) {
+	string pv;
+	TTEntry probe = {};
+	if (Main_TT.probe(board->get_key(), &probe) == 0 &&
+		probe.nmove != GAME_END) {
+		Undo u;
+		board->do_move_wrap(probe.nmove, &u);
+		os << probe.nmove << " ";
+		depth++;
+		getpv(os, board, depth);
+		board->undo_move_wrap(probe.nmove);
+	}
 }

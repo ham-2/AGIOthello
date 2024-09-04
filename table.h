@@ -25,11 +25,10 @@ public:
 struct TTEntry {
 	Key key;
 	int table_sn;
+	int eval;
 	Square nmove;
 	short depth;
-	short eval;
 	spinlock m;
-	Key pad;
 };
 
 struct TT {
@@ -51,7 +50,8 @@ struct TT {
 	void change_size(size_t new_size);
 	void increment() { tt_sn++; }
 };
-	
+
+void getpv(ostream& os, Position* board, int& depth);
 
 extern TT Main_TT;
 

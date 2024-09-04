@@ -35,10 +35,13 @@ public:
 	PRNG(uint64_t seed) { state = seed; }
 
 	uint64_t get() {
-		state ^= state << 13;
-		state ^= state >> 7;
-		state ^= state << 17;
-		return state;
+		//state ^= state << 13;
+		//state ^= state >> 7;
+		//state ^= state << 17;
+		//return state;
+
+		state ^= state >> 12, state ^= state << 25, state ^= state >> 27;
+		return state * 2685821657736338717LL;
 	}
 };
 

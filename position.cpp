@@ -309,6 +309,16 @@ void Position::undo_null_move() {
 	pop_stack();
 }
 
+void Position::do_move_wrap(Square s, Undo* new_undo) {
+	if (s == NULL_MOVE) { do_null_move(new_undo); }
+	else { do_move(s, new_undo); }
+}
+
+void Position::undo_move_wrap(Square s) {
+	if (s == NULL_MOVE) { undo_null_move(); }
+	else { undo_move(s); }
+}
+
 Position& Position::operator=(const Position board) {
 	clear_stack();
 	delete undo_stack;
