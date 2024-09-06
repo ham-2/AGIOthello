@@ -27,7 +27,7 @@ public:
 	atomic<bool> kill;
 	thread* t;
 
-	Thread(int id);
+	Thread(int id, Net* n);
 	~Thread();
 };
 
@@ -41,6 +41,8 @@ public:
 	atomic<int> depth;
 	atomic<int> depth_max;
 	condition_variable t_wait;
+
+	Net* n;
 
 	void init();
 	void add_thread();

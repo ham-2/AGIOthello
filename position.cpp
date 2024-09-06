@@ -83,7 +83,7 @@ inline void Position::place(Piece p, Square s) {
 	squares[s] = p;
 	pieces[p] ^= SquareBoard[s];
 	pieces[EMPTY] ^= SquareBoard[s];
-	
+
 	set_rays(p, s);
 
 	piece_count[EMPTY]--;
@@ -118,16 +118,17 @@ void Position::rebuild() { // computes others from squares data.
 	}
 }
 
-Position::Position() {
+Position::Position(Net* n) {
 	memset(this, 0, sizeof(Position));
 	undo_stack = new Undo;
 	memset(undo_stack, 0, sizeof(Undo));
 	undo_stack->prev = nullptr;
+	net = n;
 }
 
 void Position::verify() {
 	// Verify all data are consistant.
-	Position testpos;
+	Position testpos(net);
 	for (int i = 0; i < 64; i++) { testpos.squares[i] = squares[i]; }
 	testpos.rebuild();
 
@@ -201,8 +202,10 @@ void Position::set(string fen) {
 	// first clear stack
 	clear_stack();
 	Undo* temp = undo_stack;
+	Net* temp2 = net;
 	memset(this, 0, sizeof(Position));
 	undo_stack = temp;
+	net = temp2;
 	memset(undo_stack, 0, sizeof(Undo));
 
 	// set pieces from rank 8.
@@ -254,6 +257,7 @@ void Position::do_move(Square s, Undo* new_undo) {
 		
 		squares[c] = p;
 		set_rays(p, c);
+		update_L0(new_undo->accumulator, s, ~p, p, net);
 
 		piece_count[p]++;
 		piece_count[~p]--;
@@ -263,6 +267,7 @@ void Position::do_move(Square s, Undo* new_undo) {
 
 	// Place the new piece
 	place(p, s);
+	update_L0(new_undo->accumulator, s, EMPTY, p, net);
 	new_undo->key ^= piece_keys[p][s];
 	
 	side_to_move = ~side_to_move;

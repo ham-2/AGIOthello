@@ -143,3 +143,62 @@ void solve() {
 		<< ", " << double(nodes) / time.count() / 1000 << " MNps" 
 		<< "\npv: " << buf.str() << endl;
 }
+
+void net_speedtest() {
+	Net* n = new Net;
+	zero_weights(n);
+	rand_weights(n, 2);
+
+	int P1[64] = { };
+	int64_t r = 0;
+
+	cout << "Update test: 40M calls\n";
+
+	// Update
+	system_clock::time_point time_start = system_clock::now();
+	milliseconds time = milliseconds(0);
+
+	for (int i = 0; i < 10000000; i++) {
+		update_L0(P1, Square(rng.get() & 63), EMPTY, BLACK_P, n);
+		update_L0(P1, Square(rng.get() & 63), EMPTY, WHITE_P, n);
+		update_L0(P1, Square(rng.get() & 63), BLACK_P, WHITE_P, n);
+		update_L0(P1, Square(rng.get() & 63), WHITE_P, BLACK_P, n);
+	}
+
+	system_clock::time_point time_now = system_clock::now();
+	time = duration_cast<milliseconds>(time_now - time_start);
+
+	cout << "elapsed time: " << time.count() << "ms"
+		<< ", " << double(40000) / time.count() << " MOps" << endl;
+
+	cout << "Evaluate test: 10M calls\n";
+
+	// Evaluate
+	time_start = system_clock::now();
+
+	for (int i = 0; i < 10000000; i++) {
+		for (int j = 0; j < 32; j++) {
+			uint64_t r = rng.get();
+			P1[j++] = int((r >> 0) & 127);
+			P1[j++] = int((r >> 8) & 127);
+			P1[j++] = int((r >> 16) & 127);
+			P1[j]   = int((r >> 24) & 127);
+		}
+		r += compute(P1, n, BLACK);
+	}
+
+	time_now = system_clock::now();
+	time = duration_cast<milliseconds>(time_now - time_start);
+
+	cout << "elapsed time: " << time.count() << "ms"
+		<< ", " << double(10000) / time.count() << " MOps" 
+		<< '\n' << r << endl;
+}
+
+void net_verify() {
+	Net* n = new Net;
+	zero_weights(n);
+	rand_weights(n, 7);
+
+	verify_SIMD(n);
+}

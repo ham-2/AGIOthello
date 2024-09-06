@@ -9,6 +9,7 @@
 #include "movegen.h"
 #include "search.h"
 #include "threads.h"
+#include "network.h"
 
 #include <bitset>
 
@@ -26,11 +27,9 @@ int main() {
 	Position::init();
 	Threads.init();
 
-	PRNG rng2 = PRNG(3245356235923498ULL);
-
 	system_clock::time_point time_now = system_clock::now();
 	startup_time = duration_cast<milliseconds>(time_now - time_start);
-	cout << nounitbuf << "AGIOthello alpha\n" 
+	cout << nounitbuf << "\nAGIOthello alpha\n" 
 		<< "Startup took " << startup_time.count() << "ms" << endl;
 
 	while (true) {
@@ -147,6 +146,26 @@ int main() {
 
 		else if (word == "solve") {
 			solve();
+		}
+
+		else if (word == "load") {
+			Threads.acquire_lock();
+			ss >> word;
+			load_weights(Threads.n, word);
+			Threads.release_lock();
+		}
+
+		else if (word == "save") {
+			ss >> word;
+			save_weights(Threads.n, word);
+		}
+
+		else if (word == "nettest") {
+			net_speedtest();
+		}
+
+		else if (word == "nettest2") {
+			net_verify();
 		}
 
 	}

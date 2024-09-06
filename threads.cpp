@@ -6,6 +6,7 @@ using namespace std;
 
 Threadmgr Threads;
 const char* startpos_fen = "8/8/8/3@O3/3O@3/8/8/8 w";
+const char* default_weight = "weights.bin";
 	
 void lazy_smp(Thread* t) {
 	int currdepth;
@@ -28,8 +29,8 @@ void lazy_smp(Thread* t) {
 	return;
 }
 
-Thread::Thread(int id) {
-	board = new Position;
+Thread::Thread(int id, Net* n) {
+	board = new Position(n);
 	this->id = id;
 	step = Primes[id];
 }
@@ -41,13 +42,15 @@ Thread::~Thread() {
 
 void Threadmgr::init() {
 	stop = new atomic<bool>;
-	board = new Position;
-	Threads.threads.push_back(new Thread(0));
+	n = new Net;
+	load_weights(n, default_weight);
+	board = new Position(n);
+	Threads.threads.push_back(new Thread(0, n));
 	set_all(startpos_fen);
 }
 
 void Threadmgr::add_thread() {
-	Thread* new_thread = new Thread(num_threads);
+	Thread* new_thread = new Thread(num_threads, n);
 	*(new_thread->board) = *board;
 	threads.push_back(new_thread);
 	new_thread->t = new thread(lazy_smp, new_thread);

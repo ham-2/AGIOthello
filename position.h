@@ -5,6 +5,7 @@
 
 #include "board.h"
 #include "misc.h"
+#include "network.h"
 
 using namespace std;
 
@@ -16,6 +17,9 @@ struct Undo {
 	// Informations needed to undo a move. Stored in a stack
 	Undo* prev;
 	Bitboard captured;
+
+	// For eval
+	int accumulator[64];
 
 	// Other useful informations
 	bool pass;
@@ -36,6 +40,8 @@ private:
 	uint16_t rdiags[15];
 	Color side_to_move;
 
+	Net* net;
+
 	void pop_stack();
 	void clear_stack();
 
@@ -48,7 +54,7 @@ private:
 	void rebuild();
 
 public:
-	Position();
+	Position(Net* n);
 
 	static void init();
 
@@ -61,13 +67,14 @@ public:
 	inline int get_count(Piece p) { return piece_count[p]; }
 	Bitboard get_occupied() { return ~pieces[EMPTY]; }
 	inline bool get_passed() { return undo_stack->pass; }
+	inline int* get_accumulator() { return undo_stack->accumulator; }
+	inline Net* get_net() { return net; }
 
 	// functions for movegen
 	inline uint16_t get_files(int i) { return files[i]; }
 	inline uint16_t get_ranks(int i) { return ranks[i]; }
 	inline uint16_t get_ldiags(int i) { return ldiags[i]; }
 	inline uint16_t get_rdiags(int i) { return rdiags[i]; }
-
 
 	void show();
 	void set(string fen);

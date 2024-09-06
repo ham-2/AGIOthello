@@ -8,17 +8,14 @@
 using namespace std;
 
 atomic<long> node_count(0);
-PRNG rng = PRNG(3245356235923498ULL);
 
 int eval(Position& board) {
 
 	node_count++;
 
-	int score = 0;
+	int score = compute(board.get_accumulator(), board.get_net(), board.get_side());
 
-	score += get_material(board);
-
-	score += ((rng.get() & 255) << 12) + ((rng.get() & 255) << 12);
+	score += ((rng.get() & 255) << 10) - ((rng.get() & 255) << 10);
 
 	return score;
 }
