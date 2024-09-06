@@ -1,9 +1,11 @@
 deposit bits fallback
+file <-> rank <-> diagonal (not used?)
 
 check if storing lines is faster
 
 check if undo.del can be removed
 
-check if we can rotate Key
+check if we can rotate/filp Key -> maybe exploit symmetry
+idea: always rotate board to make some condition true?
 
 check if we can get complete pv

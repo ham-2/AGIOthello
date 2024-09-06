@@ -149,7 +149,7 @@ void net_speedtest() {
 	zero_weights(n);
 	rand_weights(n, 2);
 
-	int P1[64] = { };
+	int16_t P1[64] = { };
 	int64_t r = 0;
 
 	cout << "Update test: 40M calls\n";
@@ -179,10 +179,10 @@ void net_speedtest() {
 	for (int i = 0; i < 10000000; i++) {
 		for (int j = 0; j < 32; j++) {
 			uint64_t r = rng.get();
-			P1[j++] = int((r >> 0) & 127);
-			P1[j++] = int((r >> 8) & 127);
-			P1[j++] = int((r >> 16) & 127);
-			P1[j]   = int((r >> 24) & 127);
+			P1[j++] = int16_t((r >> 0) & 127);
+			P1[j++] = int16_t((r >> 8) & 127);
+			P1[j++] = int16_t((r >> 16) & 127);
+			P1[j]   = int16_t((r >> 24) & 127);
 		}
 		r += compute(P1, n, BLACK);
 	}

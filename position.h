@@ -19,7 +19,7 @@ struct Undo {
 	Bitboard captured;
 
 	// For eval
-	int accumulator[64];
+	int16_t accumulator[64];
 
 	// Other useful informations
 	bool pass;
@@ -67,7 +67,7 @@ public:
 	inline int get_count(Piece p) { return piece_count[p]; }
 	Bitboard get_occupied() { return ~pieces[EMPTY]; }
 	inline bool get_passed() { return undo_stack->pass; }
-	inline int* get_accumulator() { return undo_stack->accumulator; }
+	inline int16_t* get_accumulator() { return undo_stack->accumulator; }
 	inline Net* get_net() { return net; }
 
 	// functions for movegen

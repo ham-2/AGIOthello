@@ -21,9 +21,7 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 		if (board.get_passed()) {
 			int score = get_material(board) ^ EVAL_END;
 
-			if (!(*stop)) {
-				Main_TT.register_entry(root_key, ply, score, GAME_END);
-			}
+			Main_TT.register_entry(root_key, 64, score, GAME_END);
 
 			return score;
 		}
