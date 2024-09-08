@@ -6,6 +6,7 @@
 #include "options.h"
 #include "board.h"
 #include "benchmark.h"
+#include "tune.h"
 #include "movegen.h"
 #include "search.h"
 #include "threads.h"
@@ -101,13 +102,42 @@ int main() {
 			set_option(ss);
 		}
 
-		else if (word == "perft") {
-			int depth;
-			ss >> depth;
+		// Commands related to weight
+
+		else if (word == "load") {
 			Threads.acquire_lock();
-			perft(Threads.board, depth);
+			ss >> word;
+			load_weights(Threads.n, word);
 			Threads.release_lock();
 		}
+
+		else if (word == "save") {
+			ss >> word;
+			save_weights(Threads.n, word);
+		}
+
+		else if (word == "rand") {
+			ss >> word;
+			rand_weights(Threads.n, stoi(word));
+		}
+
+		else if (word == "tune") {
+			ss >> word;
+			int threads = stoi(word);
+
+			ss >> word;
+			int64_t games = stoll(word);
+
+			ss >> word;
+			double lr = stod(word);
+
+			thread t = thread(do_learning,
+				Threads.n, Threads.n,
+				games, threads, lr);
+			t.detach();
+		}
+
+		// Commands for debugging
 
 		else if (word == "moves") {
 			Threads.acquire_lock();
@@ -120,7 +150,7 @@ int main() {
 		else if (word == "undo") {
 			Threads.acquire_lock();
 			while (ss >> word) {
-				Threads.undo_move(word);
+				Threads.undo_move();
 			}
 			Threads.release_lock();
 		}
@@ -131,13 +161,17 @@ int main() {
 			Threads.show(threadidx);
 		}
 
-		else if (word == "generate") {
-			Threads.gen();
-		}
-
-		else if (word == "test") {
+		else if (word == "eval") {
 			ss >> word;
 			Threads.test_eval();
+		}
+
+		else if (word == "perft") {
+			int depth;
+			ss >> depth;
+			Threads.acquire_lock();
+			perft(Threads.board, depth);
+			Threads.release_lock();
 		}
 
 		else if (word == "verify") {
@@ -146,18 +180,6 @@ int main() {
 
 		else if (word == "solve") {
 			solve();
-		}
-
-		else if (word == "load") {
-			Threads.acquire_lock();
-			ss >> word;
-			load_weights(Threads.n, word);
-			Threads.release_lock();
-		}
-
-		else if (word == "save") {
-			ss >> word;
-			save_weights(Threads.n, word);
 		}
 
 		else if (word == "nettest") {

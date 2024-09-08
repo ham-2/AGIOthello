@@ -28,6 +28,8 @@ constexpr int SIZE_F1 = 32;
 constexpr int SIZE_F2 = 32;
 constexpr int SIZE_F3 = 32;
 
+constexpr int EVAL_BITS = 29;
+
 struct Net {
 
 	alignas(32) 
@@ -52,6 +54,13 @@ void save_weights(Net* net, std::string filename);
 
 void compute_L0(int16_t* dst, Piece* squares, Net* n);
 void update_L0(int16_t* dst, Square s, Piece from, Piece to, Net* n);
+void ReLUClip_L0(int16_t* dst, int16_t* src, Color side_to_move);
+void ReLUClip_L1(int16_t* dst, int16_t* src);
+void ReLUClip_L2(int16_t* dst, int16_t* src);
+void ReLUClip_L3(int* dst, int64_t* src);
+void compute_layer(int16_t* dst, int16_t* src, int8_t* a, int16_t* b);
+void compute_L3(int64_t* dst, int16_t* src, Net* n);
+
 int compute(int16_t* src, Net* n, Color side_to_move);
 
 void verify_SIMD(Net* n);

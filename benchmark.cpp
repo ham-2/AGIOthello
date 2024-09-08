@@ -19,7 +19,7 @@ uint64_t _perft(Position* board, int depth) {
 			Undo u;
 			board->do_move(*s, &u);
 			value += _perft(board, depth - 1);
-			board->undo_move(*s);
+			board->undo_move();
 		}
 		if (ml.list == ml.end) {
 			if (board->get_passed()) {
@@ -49,7 +49,7 @@ void perft(Position* board, int depth) {
 		uint64_t sub = _perft(board, depth - 1);
 		cout << *s << " " << sub << endl;
 		value += sub;
-		board->undo_move(*s);
+		board->undo_move();
 	}
 	cout << value << '\n';
 
@@ -112,7 +112,7 @@ int _solve() {
 				nmove = s;
 			}
 
-			Threads.board->undo_move(s);
+			Threads.board->undo_move();
 			i++;
 		}
 

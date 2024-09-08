@@ -55,14 +55,6 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 		if (ply <= 0) { return eval(board); }
 
 		else {
-			// Null Move Heuristic
-			//if (ply < NULLMOVE_MAX_PLY) {
-			//	Undo u;
-			//	board.do_null_move(&u);
-			//	int null_value = -eval(board);
-			//	board.undo_null_move();
-			//	if (null_value > beta) { return null_value; }
-			//}
 
 			Square s;
 			Square nmove = probe->nmove;
@@ -117,12 +109,12 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 					nmove = s;
 					if (new_eval > alpha) { alpha = new_eval; }
 					if (alpha > beta) {
-						board.undo_move(s);
+						board.undo_move();
 						break;
 					}
 				}
 
-				board.undo_move(s);
+				board.undo_move();
 				i++;
 				index += step;
 			}

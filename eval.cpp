@@ -22,9 +22,9 @@ int eval(Position& board) {
 
 string eval_print(int eval) {
 	if (is_mate(eval)) {
-		return "mate " + to_string((eval ^ EVAL_END) >> 23);
+		return "mate " + to_string((eval ^ EVAL_END) >> (EVAL_BITS - 6));
 	}
 	else {
-		return "cd " + to_string(((eval >> 10) * 100) >> 13);
+		return "cd " + to_string(((eval >> (EVAL_BITS - 19)) * 100) >> 13);
 	}
 }

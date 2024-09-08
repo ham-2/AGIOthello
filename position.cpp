@@ -234,12 +234,16 @@ void Position::set(string fen) {
 
 	// write other data
 	undo_stack->captured = EmptyBoard;
+	compute_L0(undo_stack->accumulator, squares, net);
+
 	rebuild();
 }
 
 void Position::do_move(Square s, Undo* new_undo) {
 	memcpy(new_undo, undo_stack, sizeof(Undo));
+	new_undo->s = s;
 	new_undo->prev = undo_stack;
+	new_undo->pass = false;
 	new_undo->del = false;
 	
 	undo_stack = new_undo;
@@ -274,7 +278,10 @@ void Position::do_move(Square s, Undo* new_undo) {
 	new_undo->key ^= side_to_move_key;
 }
 
-void Position::undo_move(Square s) {
+void Position::undo_move() {
+	Square s = undo_stack->s;
+	if (s == NULL_MOVE) { undo_null_move(); return; }
+
 	Piece p = side_to_move ? WHITE_P : BLACK_P; // Piece to place again
 	Bitboard captured = undo_stack->captured;
 
@@ -297,6 +304,7 @@ void Position::undo_move(Square s) {
 
 void Position::do_null_move(Undo* new_undo) {
 	memcpy(new_undo, undo_stack, sizeof(Undo));
+	new_undo->s = NULL_MOVE;
 	new_undo->prev = undo_stack;
 	new_undo->pass = true;
 	new_undo->del = false;
@@ -317,11 +325,6 @@ void Position::undo_null_move() {
 void Position::do_move_wrap(Square s, Undo* new_undo) {
 	if (s == NULL_MOVE) { do_null_move(new_undo); }
 	else { do_move(s, new_undo); }
-}
-
-void Position::undo_move_wrap(Square s) {
-	if (s == NULL_MOVE) { undo_null_move(); }
-	else { undo_move(s); }
 }
 
 Position& Position::operator=(const Position board) {

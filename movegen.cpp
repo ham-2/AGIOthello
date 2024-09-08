@@ -1,7 +1,7 @@
 #include "movegen.h"
 
 void MoveList::generate(Position& board) {
-	Square* list_ptr = list;
+	end = list;
 	Piece p = board.get_side() ? WHITE_P : BLACK_P;
 	
 	// Rays Lookup
@@ -101,11 +101,9 @@ void MoveList::generate(Position& board) {
 	b = moves;
 
 	while (moves) {
-		*list_ptr = pop_lsb(&moves);
-		list_ptr++;
+		*end = pop_lsb(&moves);
+		end++;
 	}
-
-	end = list_ptr;
 }
 
 void MoveList::show() {

@@ -16,6 +16,7 @@ struct Undo {
 
 	// Informations needed to undo a move. Stored in a stack
 	Undo* prev;
+	Square s;
 	Bitboard captured;
 
 	// For eval
@@ -69,6 +70,7 @@ public:
 	inline bool get_passed() { return undo_stack->pass; }
 	inline int16_t* get_accumulator() { return undo_stack->accumulator; }
 	inline Net* get_net() { return net; }
+	inline void set_net(Net* n) { net = n; }
 
 	// functions for movegen
 	inline uint16_t get_files(int i) { return files[i]; }
@@ -79,11 +81,10 @@ public:
 	void show();
 	void set(string fen);
 	void do_move(Square s, Undo* new_undo);
-	void undo_move(Square s);
+	void undo_move();
 	void do_null_move(Undo* new_undo);
 	void undo_null_move();
 	void do_move_wrap(Square s, Undo* new_undo);
-	void undo_move_wrap(Square s);
 
 	Position& operator=(const Position board);
 

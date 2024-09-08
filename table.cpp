@@ -127,6 +127,6 @@ void getpv(ostream& os, Position* board, int& depth) {
 		os << probe.nmove << " ";
 		depth++;
 		getpv(os, board, depth);
-		board->undo_move_wrap(probe.nmove);
+		board->undo_move();
 	}
 }

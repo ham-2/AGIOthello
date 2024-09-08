@@ -57,8 +57,7 @@ public:
 	void show(int i);
 	void do_move(Square s);
 	inline void do_move(string ms) { do_move(parse_square(ms)); }
-	void undo_move(Square s);
-	inline void undo_move(string ms) { undo_move(parse_square(ms)); }
+	void undo_move();
 
 	void gen();
 	void test_eval();
