@@ -364,3 +364,5 @@ MigrationBackup/
 FodyWeavers.xsd
 /AGIOthello.vcxproj.filters
 /AGIOthello.vcxproj
+/temp.bin
+/data/train_result.xlsx
