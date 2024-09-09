@@ -90,7 +90,7 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 				while (reduction < ply) {
 					int lower_alpha_r = lower_alpha / (reduction + 1);
 
-					if ((reduction > ply / 3) && (i > 0) &&
+					if ((reduction > ply / 2) && (i > 0) &&
 						(comp_eval < new_eval - lower_alpha_r))
 					{
 						break;

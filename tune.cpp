@@ -101,8 +101,8 @@ void add_double(Net_train* dst, Net_train* src) {
 	}
 	for (int i = 0; i < SIZE_F1; i++) {
 		dst->L0_b[i] += src->L0_b[i];
-		dst->L0_b[i] = dst->L0_b[i] > 127 ? 127.0 :
-			dst->L0_b[i] < -127 ? -127.0 : dst->L0_b[i];
+		dst->L0_b[i] = dst->L0_b[i] > 16383 ? 16383.0 :
+			dst->L0_b[i] < -16383 ? -16383.0 : dst->L0_b[i];
 	}
 	for (int i = 0; i < SIZE_F1 * SIZE_F2; i++) {
 		dst->L1_a[i] += src->L1_a[i];
@@ -145,7 +145,7 @@ void backpropagate(Net_train* dst, Net_train* src, Position* board,
 	int16_t P3_RAW[SIZE_F3];
 	int16_t P3[SIZE_F3];
 	int64_t P_RAW;
-	int P; // score_curr
+	//int P; // score_curr
 
 	double dPdP3R[SIZE_F3];
 	double dPdP2R[SIZE_F2];
@@ -160,16 +160,11 @@ void backpropagate(Net_train* dst, Net_train* src, Position* board,
 	compute_layer(P3_RAW, P2, n->L2_a, n->L2_b);
 	ReLUClip_L2(P3, P3_RAW);
 	compute_L3(&P_RAW, P3, n);
-	ReLUClip_L3(&P, &P_RAW);
+	//ReLUClip_L3(&P, &P_RAW);
 
 	// -dE/dP = true - curr
-	double _coeff = learning_rate * (score_true - P);
-	*loss = double(abs(score_true - P));
-
-	// dP/dP_RAW
-	_coeff *= P_RAW > (1 << EVAL_BITS) ? 0.1 :
-		P_RAW < -(1 << EVAL_BITS) ? 0.1 :
-		1.0;
+	double _coeff = learning_rate * (score_true - P_RAW);
+	*loss = 1.0 * (score_true - P_RAW) * (score_true - P_RAW);
 
 	for (int i = 0; i < SIZE_F3; i++) {
 		dst->L3_a[i] += _coeff * P3[i];
@@ -246,12 +241,12 @@ void backpropagate(Net_train* dst, Net_train* src, Position* board,
 	}
 }
 
-int _solve_learning(Position* board) {
-	// Move generation
+int _solve_learning(Position* board, int depth)
+{
+
 	MoveList legal_moves;
 	legal_moves.generate(*board);
 
-	// No legal moves
 	if (legal_moves.list == legal_moves.end) {
 
 		if (board->get_passed()) {
@@ -261,7 +256,7 @@ int _solve_learning(Position* board) {
 		else {
 			Undo u;
 			board->do_null_move(&u);
-			int after_pass = -_solve_learning(board);
+			int after_pass = -_solve_learning(board, depth - 1);
 			board->undo_null_move();
 			return after_pass;
 		}
@@ -269,8 +264,10 @@ int _solve_learning(Position* board) {
 
 	// Legal moves
 	else {
+
+		if (depth < 1) { return eval(*board); }
+
 		Square s;
-		Square nmove = NULL_MOVE;
 		int comp_eval;
 		int new_eval = EVAL_INIT;
 
@@ -281,11 +278,10 @@ int _solve_learning(Position* board) {
 			Undo u;
 			board->do_move(s, &u);
 
-			comp_eval = -_solve_learning(board);
+			comp_eval = -_solve_learning(board, depth - 1);
 
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
-				nmove = s;
 			}
 
 			board->undo_move();
@@ -329,12 +325,65 @@ int _play_rand(Position* board, PRNG* rng_)
 	}
 }
 
+int _play_best(Position* board, int find_depth)
+{
+	MoveList legal_moves;
+	legal_moves.generate(*board);
+
+	if (legal_moves.list == legal_moves.end) {
+
+		if (board->get_passed()) {
+			return 0;
+		}
+
+		else {
+			Undo* u = new Undo;
+			board->do_null_move(u);
+			u->del = true;
+
+			return 1;
+		}
+	}
+
+	// Legal moves
+	else {
+
+		Square s;
+		Square nmove = NULL_MOVE;
+		int comp_eval;
+		int new_eval = EVAL_INIT;
+
+		for (int i = 0; i < legal_moves.length(); i++) {
+			s = legal_moves.list[i];
+
+			// Do move
+			Undo u;
+			board->do_move(s, &u);
+
+			comp_eval = -_solve_learning(board, find_depth);
+
+			if (comp_eval > new_eval) {
+				new_eval = comp_eval;
+				nmove = s;
+			}
+
+			board->undo_move();
+		}
+
+		Undo* u = new Undo;
+		board->do_move(nmove, u);
+		u->del = true;
+
+		return 1;
+	}
+}
+
 const char* startpos_fen_ = "8/8/8/3@O3/3O@3/8/8/8 b";
 
 void _do_learning_thread(Net_train* src,
 	Position* board, atomic<bool>* stop, 
 	atomic<double>* loss, atomic<uint64_t>* games,
-	double lr, PRNG p) 
+	int find_depth, double lr, PRNG p) 
 {
 	Net tmp;
 	Net_train src_;
@@ -349,39 +398,46 @@ void _do_learning_thread(Net_train* src,
 		board->set_net(&tmp);
 		memset(&dst_, 0, sizeof(Net_train));
 
-
 		board->set(startpos_fen_);
 		int depth = 0;
 
-		while (board->get_count(EMPTY) > 0 &&
+		while (board->get_count(EMPTY) > find_depth &&
 			_play_rand(board, &p) > 0) { depth++; }
+
+		int depth_begin = depth;
+
+		while (board->get_count(EMPTY) > 0 &&
+			_play_best(board, find_depth) > 0) { depth++; }
 
 		int depth_end = depth;
 
-		int score_true = _solve_learning(board);
+
+		int score_true = _solve_learning(board, 60);
 
 		loss_total = 0;
-		while (--depth > 0 && (depth_end - depth) < 2) {
+		while (depth >= depth_begin) {
 			backpropagate(&dst_, &src_, board,
 				score_true, &loss_curr, lr);
 
 			loss_total += loss_curr;
 
 			board->undo_move();
+			score_true = -score_true;
+			depth--;
 		}
-		loss_total /= (depth_end - depth);
-
-		while (--depth > 0) { board->undo_move(); }
+		loss_total /= (depth_end - depth_begin + 1);
 
 		*loss = loss_total + (*loss) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
 		(*games)++;
 
 		add_double(src, &dst_);
+
+		while (--depth > 0) { board->undo_move(); }
 	}
 
 }
 
-void do_learning(Net* dst, Net* src, int64_t games, int threads, double lr) {
+void do_learning(Net* dst, Net* src, int64_t games, int threads, int find_depth, double lr) {
 
 	PRNG rng_0(3245356235923498ULL);
 
@@ -408,7 +464,7 @@ void do_learning(Net* dst, Net* src, int64_t games, int threads, double lr) {
 		thread_[i] = thread(
 			_do_learning_thread,
 			&curr, boards[i], &(Threads.stop), 
-			loss + i, &games_,
+			loss + i, &games_, find_depth,
 			lr, PRNG(rng_0.get())
 		);
 	}
@@ -418,7 +474,8 @@ void do_learning(Net* dst, Net* src, int64_t games, int threads, double lr) {
 	std::cout
 		<< "Tuning with: " << threads << " Threads\n"
 		<< "Learning rate: " << std::setw(12) << lr << '\n'
-		<< "Max Games: " << games << '\n' << std::endl;
+		<< "Max Games: " << games << '\n' 
+		<< "Depth: " << find_depth << '\n' << std::endl;
 
 	while (!(Threads.stop) && (games == -1 || (games_ < games))) {
 		loss_ = 0.0;
@@ -434,7 +491,7 @@ void do_learning(Net* dst, Net* src, int64_t games, int threads, double lr) {
 			<< "Elapsed Time: " << std::setw(12) << time.count() << "ms // "
 			<< "Games: " << std::setw(12) << games_ << " // "
 			<< "Loss: " << loss_ 
-			<< " (" << loss_ / LOSS_SMOOTH / (1 << 23) << " avg d)"
+			<< " (" << int(sqrt(loss_ / LOSS_SMOOTH) * 100 / (1 << 23)) << " MSE cd)"
 			<< std::endl;
 
 		std::this_thread::sleep_for(milliseconds(3000));

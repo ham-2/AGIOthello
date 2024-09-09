@@ -31,6 +31,6 @@ struct Net_train {
 void convert_to_double(Net_train* dst, Net* src);
 void convert_to_int(Net* dst, Net_train* src);
 
-void do_learning(Net* dst, Net* src, int64_t games, int threads, double lr);
+void do_learning(Net* dst, Net* src, int64_t games, int threads, int find_depth, double lr);
 
 #endif

@@ -71,6 +71,7 @@ public:
 	inline int16_t* get_accumulator() { return undo_stack->accumulator; }
 	inline Net* get_net() { return net; }
 	inline void set_net(Net* n) { net = n; }
+	inline void set_acc() { compute_L0(undo_stack->accumulator, squares, net);  }
 
 	// functions for movegen
 	inline uint16_t get_files(int i) { return files[i]; }

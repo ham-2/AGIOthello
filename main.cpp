@@ -31,7 +31,7 @@ int main() {
 	system_clock::time_point time_now = system_clock::now();
 	startup_time = duration_cast<milliseconds>(time_now - time_start);
 	cout << nounitbuf << "\nAGIOthello alpha\n" 
-		<< "Startup took " << startup_time.count() << "ms" << endl;
+		<< "Startup took " << startup_time.count() << "ms\n" << endl;
 
 	while (true) {
 		getline(cin, input);
@@ -116,6 +116,10 @@ int main() {
 			save_weights(Threads.n, word);
 		}
 
+		else if (word == "zero") {
+			zero_weights(Threads.n);
+		}
+
 		else if (word == "rand") {
 			ss >> word;
 			rand_weights(Threads.n, stoi(word));
@@ -129,11 +133,14 @@ int main() {
 			int64_t games = stoll(word);
 
 			ss >> word;
+			int find_depth = stoi(word);
+
+			ss >> word;
 			double lr = stod(word);
 
 			thread t = thread(do_learning,
 				Threads.n, Threads.n,
-				games, threads, lr);
+				games, threads, find_depth, lr);
 			t.detach();
 		}
 
@@ -183,11 +190,8 @@ int main() {
 		}
 
 		else if (word == "nettest") {
-			net_speedtest();
-		}
-
-		else if (word == "nettest2") {
 			net_verify();
+			net_speedtest();
 		}
 
 	}

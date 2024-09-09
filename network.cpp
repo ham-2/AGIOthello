@@ -209,14 +209,18 @@ void ReLUClip_L3(int* dst, int64_t* src) {
 }
 
 void compute_layer_fallback(int16_t* dst, int16_t* src, int8_t* a, int16_t* b) {
-	for (int j = 0; j < SIZE_F2; j++) {
-		dst[j] = int(b[j]);
-	}
 
+	int tmp[SIZE_F2] = { };
 	for (int i = 0; i < SIZE_F1; i++) {
 		for (int j = 0; j < SIZE_F2; j++) {
-			dst[j] += src[i] * a[i * SIZE_F2 + j];
+			tmp[j] += src[i] * a[i * SIZE_F2 + j];
 		}
+	}
+
+	for (int j = 0; j < SIZE_F2; j++) {
+		tmp[j] += b[j];
+		dst[j] = tmp[j] > 32767 ? 32767 :
+			tmp[j] < -32768 ? 32768 : tmp[j];
 	}
 }
 
@@ -326,17 +330,21 @@ void verify_SIMD(Net* n) {
 		if (P1_ACC[i] != P1_ACC_F[i]) { p1_err++; }
 	}
 
-	std::cout << "\nupdate_L0 error: " << p1_err << std::endl;
+	std::cout << "update_L0 error: " << p1_err << std::endl;
 
 	ReLUClip_L0(P1, P1_ACC, BLACK);
 	compute_layer(P2, P1, n->L1_a, n->L1_b);
-	ReLUClip_L1(P2, P2);
+	//ReLUClip_L1(P2, P2);
 	compute_layer_fallback(P2_F, P1, n->L1_a, n->L1_b);
-	ReLUClip_L1(P2_F, P2_F);
+	//ReLUClip_L1(P2_F, P2_F);
 
 	int p2_err = 0;
 	for (int i = 0; i < SIZE_F2; i++) {
-		if (P2[i] != P2_F[i]) { p2_err++; }
+		if (P2[i] != P2_F[i]) { 
+			std::cout << P2[i] << ' ' << P2_F[i] << '\n';
+			p2_err++;
+		}
 	}
-	std::cout << "\ncompute_Layer error: " << p2_err << std::endl;
+
+	std::cout << "compute_Layer error: " << p2_err << std::endl;
 }
