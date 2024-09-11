@@ -121,6 +121,14 @@ void Threadmgr::show(int i) {
 	}
 }
 
+void Threadmgr::set_weights() {
+	board->set_accumulator();
+	for (int i = 0; i < threads.size(); i++) {
+		memcpy(threads[i]->board->get_net(), n, sizeof(Net));
+		threads[i]->board->set_accumulator();
+	}
+}
+
 void Threadmgr::do_move(Square m) {
 	Undo* u = new Undo;
 	board->do_move_wrap(m, u);

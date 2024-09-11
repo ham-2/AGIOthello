@@ -261,7 +261,7 @@ void Position::do_move(Square s, Undo* new_undo) {
 		
 		squares[c] = p;
 		set_rays(p, c);
-		update_L0(new_undo->accumulator, s, ~p, p, net);
+		update_L0(new_undo->accumulator, c, ~p, p, net);
 
 		piece_count[p]++;
 		piece_count[~p]--;

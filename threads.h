@@ -55,6 +55,7 @@ public:
 	void sync();
 	void set_all(string fen);
 	void show(int i);
+	void set_weights();
 	void do_move(Square s);
 	inline void do_move(string ms) { do_move(parse_square(ms)); }
 	void undo_move();

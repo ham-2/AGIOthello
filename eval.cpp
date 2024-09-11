@@ -15,7 +15,7 @@ int eval(Position& board) {
 
 	int score = compute(board.get_accumulator(), board.get_net(), board.get_side());
 
-	score += ((rng.get() & 255) << 10) - ((rng.get() & 255) << 10);
+	//score += ((rng.get() & 255) << 10) - ((rng.get() & 255) << 10);
 
 	return score;
 }

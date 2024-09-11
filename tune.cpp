@@ -25,6 +25,7 @@ void convert_to_double(Net_train* dst, Net* src)
 	for (int i = 0; i < SIZE_F3; i++) {
 		dst->L3_a[i] = src->L3_a[i];
 	}
+	dst->L3_b = src->L3_b;
 
 	dst->m.unlock();
 }
@@ -54,38 +55,8 @@ void convert_to_int(Net* dst, Net_train* src)
 	for (int i = 0; i < SIZE_F3; i++) {
 		dst->L3_a[i] = src->L3_a[i];
 	}
+	dst->L3_b = src->L3_b;
 
-	src->m.unlock();
-}
-
-void copy_double(Net_train* dst, Net_train* src) {
-	
-	src->m.lock();
-	dst->m.lock();
-
-	for (int i = 0; i < SIZE_F0 * SIZE_F1; i++) {
-		dst->L0_a[i] = src->L0_a[i];
-	}
-	for (int i = 0; i < SIZE_F1; i++) {
-		dst->L0_b[i] = src->L0_b[i];
-	}
-	for (int i = 0; i < SIZE_F1 * SIZE_F2; i++) {
-		dst->L1_a[i] = src->L1_a[i];
-	}
-	for (int i = 0; i < SIZE_F2; i++) {
-		dst->L1_b[i] = src->L1_b[i];
-	}
-	for (int i = 0; i < SIZE_F2 * SIZE_F3; i++) {
-		dst->L2_a[i] = src->L2_a[i];
-	}
-	for (int i = 0; i < SIZE_F3; i++) {
-		dst->L2_b[i] = src->L2_b[i];
-	}
-	for (int i = 0; i < SIZE_F3; i++) {
-		dst->L3_a[i] = src->L3_a[i];
-	}
-
-	dst->m.unlock();
 	src->m.unlock();
 }
 
@@ -126,15 +97,19 @@ void add_double(Net_train* dst, Net_train* src) {
 	}
 	for (int i = 0; i < SIZE_F3; i++) {
 		dst->L3_a[i] += src->L3_a[i];
-		dst->L3_a[i] = dst->L3_a[i] > 16383 ? 16383.0 :
-			dst->L3_a[i] < -16383 ? -16383.0 : dst->L3_a[i];
+		dst->L3_a[i] = dst->L3_a[i] > 32767 ? 32767.0 :
+			dst->L3_a[i] < -32767 ? -32767.0 : dst->L3_a[i];
 	}
+	dst->L3_b += src->L3_b;
+	dst->L3_b = dst->L3_b > (1 << EVAL_BITS) ? (1 << EVAL_BITS) :
+		dst->L3_b < -(1 << EVAL_BITS) ? -(1 << EVAL_BITS) :
+		dst->L3_b;
 
 	dst->m.unlock();
 	src->m.unlock();
 }
 
-void backpropagate(Net_train* dst, Net_train* src, Position* board,
+void backpropagate(Net_train* dst, Position* board,
 	int score_true, double* loss, double learning_rate)
 {
 
@@ -144,8 +119,7 @@ void backpropagate(Net_train* dst, Net_train* src, Position* board,
 	int16_t P2[SIZE_F2];
 	int16_t P3_RAW[SIZE_F3];
 	int16_t P3[SIZE_F3];
-	int64_t P_RAW;
-	//int P; // score_curr
+	int64_t P;
 
 	double dPdP3R[SIZE_F3];
 	double dPdP2R[SIZE_F2];
@@ -159,20 +133,21 @@ void backpropagate(Net_train* dst, Net_train* src, Position* board,
 	ReLUClip_L1(P2, P2_RAW);
 	compute_layer(P3_RAW, P2, n->L2_a, n->L2_b);
 	ReLUClip_L2(P3, P3_RAW);
-	compute_L3(&P_RAW, P3, n);
-	//ReLUClip_L3(&P, &P_RAW);
+	compute_L3(&P, P3, n);
 
 	// -dE/dP = true - curr
-	double _coeff = learning_rate * (score_true - P_RAW);
-	*loss = 1.0 * (score_true - P_RAW) * (score_true - P_RAW);
+	double _coeff = learning_rate * (score_true - P);
+	*loss = 1.0 * (score_true - P) * (score_true - P);
+
+	dst->L3_b += _coeff;
 
 	for (int i = 0; i < SIZE_F3; i++) {
 		dst->L3_a[i] += _coeff * P3[i];
 	}
 
 	for (int i = 0; i < SIZE_F3; i++) {
-		dPdP3R[i] = P3_RAW[i] > 16383 ? 0.1 :
-			P3_RAW[i] < 0 ? 0.1 : 1.0;
+		dPdP3R[i] = P3_RAW[i] > 16383 ? 0.0 :
+			P3_RAW[i] < 0 ? 0.0 : 1.0;
 
 		dPdP3R[i] *= n->L3_a[i];
 
@@ -186,8 +161,8 @@ void backpropagate(Net_train* dst, Net_train* src, Position* board,
 	}
 
 	for (int i = 0; i < SIZE_F2; i++) {
-		double dP2dP2R = P2_RAW[i] > 127 ? 0.1 :
-			P2_RAW[i] < 0 ? 0.1 : 1.0;
+		double dP2dP2R = P2_RAW[i] > 32512 ? 0.0 :
+			P2_RAW[i] < 0 ? 0.0 : 1.0;
 
 		dPdP2R[i] = 0;
 		for (int k = 0; k < SIZE_F3; k++) {
@@ -207,14 +182,14 @@ void backpropagate(Net_train* dst, Net_train* src, Position* board,
 	if (board->get_side()) { acc += 32; }
 
 	for (int i = 0; i < SIZE_F1; i++) {
-		double dP1dP1R = acc[i] > 127 ? 0.1 :
-			acc[i] < 0 ? 0.1 : 1.0;
+		double dP1dP1R = acc[i] > 4064 ? 0.0 :
+			acc[i] < 0 ? 0.0 : 1.0;
 
 		dPdP1R[i] = 0;
 		for (int k = 0; k < SIZE_F2; k++) {
 			dPdP1R[i] += dPdP2R[k] * n->L1_a[k + i * SIZE_F3];
 		}
-		dPdP1R[i] *= dP1dP1R / 256;
+		dPdP1R[i] *= dP1dP1R / 32;
 
 		dst->L0_b[i] += _coeff * dPdP1R[i];
 	}
@@ -239,6 +214,7 @@ void backpropagate(Net_train* dst, Net_train* src, Position* board,
 			}
 		}
 	}
+
 }
 
 int _solve_learning(Position* board, int depth)
@@ -386,15 +362,12 @@ void _do_learning_thread(Net_train* src,
 	int find_depth, double lr, PRNG p) 
 {
 	Net tmp;
-	Net_train src_;
 	Net_train dst_;
 
-	int score[64];
 	double loss_total, loss_curr;
 
 	while (!(*stop)) {
-		copy_double(&src_, src);
-		convert_to_int(&tmp, &src_);
+		convert_to_int(&tmp, src);
 		board->set_net(&tmp);
 		memset(&dst_, 0, sizeof(Net_train));
 
@@ -416,7 +389,7 @@ void _do_learning_thread(Net_train* src,
 
 		loss_total = 0;
 		while (depth >= depth_begin) {
-			backpropagate(&dst_, &src_, board,
+			backpropagate(&dst_, board,
 				score_true, &loss_curr, lr);
 
 			loss_total += loss_curr;
@@ -491,7 +464,7 @@ void do_learning(Net* dst, Net* src, int64_t games, int threads, int find_depth,
 			<< "Elapsed Time: " << std::setw(12) << time.count() << "ms // "
 			<< "Games: " << std::setw(12) << games_ << " // "
 			<< "Loss: " << loss_ 
-			<< " (" << int(sqrt(loss_ / LOSS_SMOOTH) * 100 / (1 << 23)) << " MSE cd)"
+			<< " (" << int(sqrt(loss_ / LOSS_SMOOTH) * 100 / (1 << 23)) << " RMS cd)"
 			<< std::endl;
 
 		std::this_thread::sleep_for(milliseconds(3000));

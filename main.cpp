@@ -108,6 +108,7 @@ int main() {
 			Threads.acquire_lock();
 			ss >> word;
 			load_weights(Threads.n, word);
+			Threads.set_weights();
 			Threads.release_lock();
 		}
 
@@ -118,11 +119,18 @@ int main() {
 
 		else if (word == "zero") {
 			zero_weights(Threads.n);
+			Threads.set_weights();
 		}
 
 		else if (word == "rand") {
 			ss >> word;
 			rand_weights(Threads.n, stoi(word));
+			Threads.set_weights();
+		}
+
+		else if (word == "setmat") {
+			set_weights(Threads.n);
+			Threads.set_weights();
 		}
 
 		else if (word == "tune") {

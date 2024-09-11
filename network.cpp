@@ -19,6 +19,7 @@ void load_weights(Net* net, std::string filename)
 	input.read((char*)net->L2_a, SIZE_F2 * SIZE_F3);
 	input.read((char*)net->L2_b, SIZE_F3 * 2);
 	input.read((char*)net->L3_a, SIZE_F3 * 2);
+	input.read((char*)(&net->L3_b), 4);
 
 	if (input.fail() || (input.peek() != EOF)) {
 		std::cout << "Failed to load weights" << std::endl;
@@ -45,6 +46,7 @@ void save_weights(Net* net, std::string filename)
 	output.write((char*)net->L2_a, SIZE_F2 * SIZE_F3);
 	output.write((char*)net->L2_b, SIZE_F3 * 2);
 	output.write((char*)net->L3_a, SIZE_F3 * 2);
+	output.write((char*)(&net->L3_b), 4);
 
 	if (output.fail()) {
 		std::cout << "Failed to save weights" << std::endl;
@@ -65,23 +67,49 @@ void rand_weights(Net* net, int bits) {
 	for (int i = 0; i < SIZE_F0 * SIZE_F1; i++) {
 		net->L0_a[i] += (rng.get() & mask) - (rng.get() & mask);
 	}
-	for (int i = 0; i < SIZE_F1; i++) {
-		net->L0_b[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
-	}
+	//for (int i = 0; i < SIZE_F1; i++) {
+	//	net->L0_b[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
+	//}
 	for (int i = 0; i < SIZE_F1 * SIZE_F2; i++) {
 		net->L1_a[i] += (rng.get() & mask) - (rng.get() & mask);
 	}
-	for (int i = 0; i < SIZE_F2; i++) {
-		net->L1_b[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
-	}
+	//for (int i = 0; i < SIZE_F2; i++) {
+	//	net->L1_b[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
+	//}
 	for (int i = 0; i < SIZE_F2 * SIZE_F3; i++) {
 		net->L2_a[i] += (rng.get() & mask) - (rng.get() & mask);
 	}
+	//for (int i = 0; i < SIZE_F3; i++) {
+	//	net->L2_b[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
+	//}
 	for (int i = 0; i < SIZE_F3; i++) {
-		net->L2_b[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
+		net->L3_a[i] += (rng.get() & mask) - (rng.get() & mask);
 	}
-	for (int i = 0; i < SIZE_F3; i++) {
-		net->L3_a[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
+}
+
+void set_weights(Net* net) {
+	zero_weights(net);
+	for (int i = 0; i < 64; i++) {
+		for (int j = 0; j < SIZE_F1 / 2; j++) {
+			net->L0_a[(i << 6) + (j << 2) + 0] = 32;
+			net->L0_a[(i << 6) + (j << 2) + 3] = 32;
+		}
+	}
+	for (int i = 0; i < 32; i += 2) {
+		for (int j = 0; j < 32; j += 2) {
+			net->L1_a[j + 0 + (i + 0) * 32] = 16;
+			net->L1_a[j + 1 + (i + 1) * 32] = 16;
+		}
+	}
+	for (int i = 0; i < 32; i += 2) {
+		for (int j = 0; j < 32; j += 2) {
+			net->L2_a[j + 0 + (i + 0) * 32] = 2;
+			net->L2_a[j + 1 + (i + 1) * 32] = 2;
+		}
+	}
+	for (int i = 0; i < 32; i += 2) {
+		net->L3_a[i + 0] = 16384;
+		net->L3_a[i + 1] = -16384;
 	}
 }
 
@@ -181,7 +209,7 @@ void update_L0(int16_t* dst, Square s, Piece from, Piece to, Net* n) {
 void ReLUClip_L0(int16_t* dst, int16_t* src, Color side_to_move) {
 	if (side_to_move) { src += SIZE_F1; }
 	for (int i = 0; i < SIZE_F1; i++) {
-		dst[i] = src[i] >> 8;
+		dst[i] = src[i] >> 5;
 		dst[i] = dst[i] < 0 ? 0 :
 			dst[i] > 127 ? 127 : dst[i];
 	}
@@ -200,12 +228,6 @@ void ReLUClip_L2(int16_t* dst, int16_t* src) {
 		dst[i] = src[i] < 0 ? 0 :
 			src[i] > 16383 ? 16383 : src[i];
 	}
-}
-
-void ReLUClip_L3(int* dst, int64_t* src) {
-	*dst = *src > (1 << EVAL_BITS) ? (1 << EVAL_BITS) :
-		*src < -(1 << EVAL_BITS) ? -(1 << EVAL_BITS) :
-		int(*src);
 }
 
 void compute_layer_fallback(int16_t* dst, int16_t* src, int8_t* a, int16_t* b) {
@@ -262,7 +284,7 @@ void compute_layer(int16_t* dst, int16_t* src, int8_t* a, int16_t* b) {
 }
 
 void compute_L3(int64_t* dst, int16_t* src, Net* n) {
-	*dst = 0;
+	*dst = n->L3_b;
 	for (int i = 0; i < SIZE_F3; i++) {
 		*dst += int64_t(src[i]) * n->L3_a[i];
 	}
@@ -270,7 +292,7 @@ void compute_L3(int64_t* dst, int16_t* src, Net* n) {
 
 
 int compute(int16_t* src, Net* n, Color side_to_move) {
-	int r;
+
 	alignas(32)
 	int16_t P1[SIZE_F1];
 	int16_t P2[SIZE_F2];
@@ -283,9 +305,8 @@ int compute(int16_t* src, Net* n, Color side_to_move) {
 	compute_layer(P3, P2, n->L2_a, n->L2_b);
 	ReLUClip_L2(P3, P3);
 	compute_L3(&P4, P3, n);
-	ReLUClip_L3(&r, &P4);
 
-	return r;
+	return int(P4);
 }
 
 void verify_SIMD(Net* n) {
@@ -317,26 +338,30 @@ void verify_SIMD(Net* n) {
 		if (P1_ACC[i] != P1_ACC_F[i]) { p1_err++; }
 	}
 
-	for (int i = 0; i < 64; i++) {
-		Piece p = Piece(rng.get() & 3);
-		if (p == MISC) { p = EMPTY; }
-		update_L0(P1_ACC, Square(i), sq[i], p, n);
-		sq[i] = p;
-	}
+	for (int j = 0; j < 10000; j++) {
 
-	compute_L0(P1_ACC_F, sq, n);
+		for (int i = 0; i < 64; i++) {
+			Piece p = Piece(rng.get() & 3);
+			if (p == MISC) { p = EMPTY; }
+			update_L0(P1_ACC, Square(i), sq[i], p, n);
+			sq[i] = p;
+		}
 
-	for (int i = 0; i < SIZE_F1 * 2; i++) {
-		if (P1_ACC[i] != P1_ACC_F[i]) { p1_err++; }
+		compute_L0(P1_ACC_F, sq, n);
+
+		for (int i = 0; i < SIZE_F1 * 2; i++) {
+			if (P1_ACC[i] != P1_ACC_F[i]) { 
+				p1_err++;
+			}
+		}
+
 	}
 
 	std::cout << "update_L0 error: " << p1_err << std::endl;
 
 	ReLUClip_L0(P1, P1_ACC, BLACK);
 	compute_layer(P2, P1, n->L1_a, n->L1_b);
-	//ReLUClip_L1(P2, P2);
 	compute_layer_fallback(P2_F, P1, n->L1_a, n->L1_b);
-	//ReLUClip_L1(P2_F, P2_F);
 
 	int p2_err = 0;
 	for (int i = 0; i < SIZE_F2; i++) {

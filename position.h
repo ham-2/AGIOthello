@@ -69,9 +69,11 @@ public:
 	Bitboard get_occupied() { return ~pieces[EMPTY]; }
 	inline bool get_passed() { return undo_stack->pass; }
 	inline int16_t* get_accumulator() { return undo_stack->accumulator; }
+	inline void set_accumulator() { compute_L0(undo_stack->accumulator, squares, net); }
 	inline Net* get_net() { return net; }
+
+	// functions for tuning
 	inline void set_net(Net* n) { net = n; }
-	inline void set_acc() { compute_L0(undo_stack->accumulator, squares, net);  }
 
 	// functions for movegen
 	inline uint16_t get_files(int i) { return files[i]; }

@@ -26,6 +26,7 @@ struct Net_train {
 	double L2_b[SIZE_F3];
 
 	double L3_a[SIZE_F3];
+	double L3_b;
 };
 
 void convert_to_double(Net_train* dst, Net* src);
