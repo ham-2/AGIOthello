@@ -182,14 +182,14 @@ void backpropagate(Net_train* dst, Position* board,
 	if (board->get_side()) { acc += 32; }
 
 	for (int i = 0; i < SIZE_F1; i++) {
-		double dP1dP1R = acc[i] > 4064 ? 0.0 :
+		double dP1dP1R = acc[i] > 32512 ? 0.0 :
 			acc[i] < 0 ? 0.0 : 1.0;
 
 		dPdP1R[i] = 0;
 		for (int k = 0; k < SIZE_F2; k++) {
 			dPdP1R[i] += dPdP2R[k] * n->L1_a[k + i * SIZE_F3];
 		}
-		dPdP1R[i] *= dP1dP1R / 32;
+		dPdP1R[i] *= dP1dP1R / 256;
 
 		dst->L0_b[i] += _coeff * dPdP1R[i];
 	}

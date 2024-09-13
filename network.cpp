@@ -115,101 +115,154 @@ void set_weights(Net* net) {
 
 // Evaluation
 
-constexpr int half_F01 = SIZE_F0 * SIZE_F1 / 2;
-
 inline static int is_black(Piece p) { return int(p == BLACK_P); }
 inline static int is_white(Piece p) { return int(p == WHITE_P); }
 
-void compute_L0(int16_t* dst, Piece* squares, Net* n) {
+// L0 idx
+// DIR 1 (0)	[8192 * pair + 2048 * dir + sq * SIZE_F1]
+// DIR 7 (1)	
+// DIR 8 (2)	
+// DIR 9 (3)	
+//	EMPTY - US		(0)
+//	US    - EMPTY	(1)
+//	US    - US		(2)
+//	US	  - THEM	(3)
+//	THEM  - US		(4)
+//	THEM  - THEM	(5)
+//	THEM  - EMPTY	(6)
+//	EMPTY - THEM	(7)
+// US			[65536 + sq * SIZE_F1]
+// THEM			[67584 + sq * SIZE_F1]
+
+
+void compute_L0(int16_t* dst, Piece* squares, Bitboard* pieces, Net* n) {
 	for (int i = 0; i < SIZE_F1; i++) {
-		// Black
-		dst[i] = n->L0_b[i];
-		// White
+		// Bias
+		dst[i          ] = n->L0_b[i];
 		dst[i + SIZE_F1] = n->L0_b[i];
 	}
 
-	for (int i = 0; i < half_F01; i++) {
-		// Black
-		dst[i & (SIZE_F1 - 1)] += is_black(squares[i >> 5]) * (n->L0_a)[(i << 1)];
-		dst[i & (SIZE_F1 - 1)] += is_white(squares[i >> 5]) * (n->L0_a)[(i << 1) + 1];
-		// White
-		dst[(i & (SIZE_F1 - 1)) + SIZE_F1] += is_white(squares[i >> 5]) * (n->L0_a)[(i << 1)];
-		dst[(i & (SIZE_F1 - 1)) + SIZE_F1] += is_black(squares[i >> 5]) * (n->L0_a)[(i << 1) + 1];
+	for (int s = A1; s < SQ_END; s++) {
+		if (squares[s] == BLACK_P) {
+			for (int i = 0; i < SIZE_F1; i++) {
+				dst[i          ] += n->L0_a[s * SIZE_F1 + i + 65536];
+				dst[i + SIZE_F1] += n->L0_a[s * SIZE_F1 + i + 67584];
+			}
+		}
+
+		else if (squares[s] == WHITE_P) {
+			for (int i = 0; i < SIZE_F1; i++) {
+				dst[i          ] += n->L0_a[s * SIZE_F1 + i + 67584];
+				dst[i + SIZE_F1] += n->L0_a[s * SIZE_F1 + i + 65536];
+			}
+		}
+	}
+
+	for (int pair = 0; pair < 8; pair++) {
+
+	Bitboard bn[4];
+	int p1[8] = { 0, 1, 1, 1, 2, 2, 2, 0 };
+	int p2[8] = { 1, 0, 1, 2, 1, 2, 0, 2 };
+	int pair2 = pair ^ 7;
+
+	bn[0] = shift<1>(pieces[p1[pair]]) & pieces[p2[pair]];
+	bn[1] = shift<7>(pieces[p1[pair]]) & pieces[p2[pair]];
+	bn[2] = shift<8>(pieces[p1[pair]]) & pieces[p2[pair]];
+	bn[3] = shift<9>(pieces[p1[pair]]) & pieces[p2[pair]];
+
+	for (int dir = 0; dir < 4; dir++) {
+		while (bn[dir]) {
+			Square s = pop_lsb(&bn[dir]);
+			for (int i = 0; i < SIZE_F1; i++) {
+				dst[i          ] += n->L0_a[8192 * pair  + 2048 * dir + s * SIZE_F1 + i];
+				dst[i + SIZE_F1] += n->L0_a[8192 * pair2 + 2048 * dir + s * SIZE_F1 + i];
+			}
+		}
+	}
+
 	}
 }
 
-void update_L0(int16_t* dst, Square s, Piece from, Piece to, Net* n) {
+void _sub_L0(int16_t* dst, int addr, Net* n) {
 #ifdef _AVX256_
-	
-	__m256i src1_ = _mm256_set1_epi8(uint8_t(is_black(from)));
-	__m256i src2_ = _mm256_set1_epi8(uint8_t(is_white(from)));
-	__m256i l0w1_ = _mm256_load_si256((__m256i*)(n->L0_a + (int(s) << 6)));
-	__m256i l0w2_ = _mm256_load_si256((__m256i*)(n->L0_a + (int(s) << 6) + 32));
-	__m256i src_, dst1_, dst2_, dst3_, dst4_, mul_;
-
-	dst1_ = _mm256_load_si256((__m256i*)(dst));
-	dst2_ = _mm256_load_si256((__m256i*)(dst + 16));
-	dst3_ = _mm256_load_si256((__m256i*)(dst      + SIZE_F1));
-	dst4_ = _mm256_load_si256((__m256i*)(dst + 16 + SIZE_F1));
-
-	src_ = _mm256_unpackhi_epi8(src1_, src2_);
-
-	mul_ = _mm256_maddubs_epi16(src_, l0w1_);
-	dst1_ = _mm256_subs_epi16(dst1_, mul_);
-	mul_ = _mm256_maddubs_epi16(src_, l0w2_);
-	dst2_ = _mm256_subs_epi16(dst2_, mul_);
-
-	src_ = _mm256_unpackhi_epi8(src2_, src1_);
-
-	mul_ = _mm256_maddubs_epi16(src_, l0w1_);
-	dst3_ = _mm256_subs_epi16(dst3_, mul_);
-	mul_ = _mm256_maddubs_epi16(src_, l0w2_);
-	dst4_ = _mm256_subs_epi16(dst4_, mul_);
-
-	src1_ = _mm256_set1_epi8(uint8_t(is_black(to)));
-	src2_ = _mm256_set1_epi8(uint8_t(is_white(to)));
-
-	src_ = _mm256_unpackhi_epi8(src1_, src2_);
-
-	mul_ = _mm256_maddubs_epi16(src_, l0w1_);
-	dst1_ = _mm256_adds_epi16(dst1_, mul_);
-	mul_ = _mm256_maddubs_epi16(src_, l0w2_);
-	dst2_ = _mm256_adds_epi16(dst2_, mul_);
-
-	src_ = _mm256_unpackhi_epi8(src2_, src1_);
-
-	mul_ = _mm256_maddubs_epi16(src_, l0w1_);
-	dst3_ = _mm256_adds_epi16(dst3_, mul_);
-	mul_ = _mm256_maddubs_epi16(src_, l0w2_);
-	dst4_ = _mm256_adds_epi16(dst4_, mul_);
-
-	_mm256_store_si256((__m256i*)(dst), dst1_);
-	_mm256_store_si256((__m256i*)(dst + 16), dst2_);
-	_mm256_store_si256((__m256i*)(dst + SIZE_F1), dst3_);
-	_mm256_store_si256((__m256i*)(dst + 16 + SIZE_F1), dst4_);
-
+	for (int i = 0; i < SIZE_F1; i += 16) {
+		__m256i dst_ = _mm256_load_si256((__m256i*)(dst + i));
+		__m256i src_ = _mm256_cvtepi8_epi16(_mm_load_si128((__m128i*)(n->L0_a + addr + i)));
+		dst_ = _mm256_subs_epi16(dst_, src_);
+		_mm256_store_si256((__m256i*)(dst), dst_);
+	}
 #else
-
 	for (int i = 0; i < SIZE_F1; i++) {
-		// Black
-		dst[i] -= is_black(from) * (n->L0_a)[(int(s) << 6) + 2 * i];
-		dst[i] += is_black(to  ) * (n->L0_a)[(int(s) << 6) + 2 * i];
-		dst[i] -= is_white(from) * (n->L0_a)[(int(s) << 6) + 2 * i + 1];
-		dst[i] += is_white(to  ) * (n->L0_a)[(int(s) << 6) + 2 * i + 1];
-		// White
-		dst[i + SIZE_F1] -= is_white(from) * (n->L0_a)[(int(s) << 6) + 2 * i];
-		dst[i + SIZE_F1] += is_white(to  ) * (n->L0_a)[(int(s) << 6) + 2 * i];
-		dst[i + SIZE_F1] -= is_black(from) * (n->L0_a)[(int(s) << 6) + 2 * i + 1];
-		dst[i + SIZE_F1] += is_black(to  ) * (n->L0_a)[(int(s) << 6) + 2 * i + 1];
+		dst[i] -= n[addr + i];
+	}
+#endif
+}
+
+void _add_L0(int16_t* dst, int addr, Net* n) {
+#ifdef _AVX256_
+	for (int i = 0; i < SIZE_F1; i += 16) {
+		__m256i dst_ = _mm256_load_si256((__m256i*)(dst + i));
+		__m256i src_ = _mm256_cvtepi8_epi16(_mm_load_si128((__m128i*)(n->L0_a + addr + i)));
+		dst_ = _mm256_adds_epi16(dst_, src_);
+		_mm256_store_si256((__m256i*)(dst), dst_);
+	}
+#else
+	for (int i = 0; i < SIZE_F1; i++) {
+		dst[i] += n[addr + i];
+	}
+#endif
+}
+
+int _get_pair(Piece p1, Piece p2, Color c) {
+	if (!c) {
+		return p1 * 3 + p2 - 1;
+	}
+	else {
+
+	}
+}
+
+void update_L0(int16_t* dst, Square s, Piece* squares, Piece to, Net* n) {
+	if (squares[s] == EMPTY) 
+	{
+		if (get_rank(s) != 0) {
+			if (get_file(s) != 0) {
+
+			}
+
+			if (get_file(s) != 7) {
+
+			}
+		}
+		if (get_file(s) != 0) {
+		
+		}
+
+		if (get_file(s) != 7) {
+			
+		}
+		if (get_rank(s) != 7) {
+			if (get_file(s) != 0) {
+
+			}
+
+			if (get_file(s) != 7) {
+
+			}
+		}
+
 	}
 
-#endif
+	else 
+	{
+
+	}
 }
 
 void ReLUClip_L0(int16_t* dst, int16_t* src, Color side_to_move) {
 	if (side_to_move) { src += SIZE_F1; }
 	for (int i = 0; i < SIZE_F1; i++) {
-		dst[i] = src[i] >> 5;
+		dst[i] = src[i] >> 8;
 		dst[i] = dst[i] < 0 ? 0 :
 			dst[i] > 127 ? 127 : dst[i];
 	}

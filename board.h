@@ -142,8 +142,17 @@ inline Square lsb_square(Bitboard b) {
 	unsigned long _index = 0;
 	_BitScanForward64(&_index, b);
 	return Square(_index);
-#else
+#elif defined __GNUC__
 	return Square(__builtin_ctzll(b));
+#else
+	int n = 1;
+
+	if ((b & 0xFFFFFFFF) == 0) { n = n + 32; b = b >> 32; }
+	if ((b & 0x0000FFFF) == 0) { n = n + 16; b = b >> 16; }
+	if ((b & 0x000000FF) == 0) { n = n +  8; b = b >>  8; }
+	if ((b & 0x0000000F) == 0) { n = n +  4; b = b >>  4; }
+	if ((b & 0x00000003) == 0) { n = n +  2; b = b >>  2; }
+	return n - (b & 1);
 #endif
 }
 

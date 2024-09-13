@@ -23,7 +23,7 @@ inline std::string getcwd_wrap(char* dst, int bytes) {
 #include "board.h"
 #include "misc.h"
 
-constexpr int SIZE_F0 = 128;
+constexpr int SIZE_F0 = 128 + 64 * 4 * 8;
 constexpr int SIZE_F1 = 32;
 constexpr int SIZE_F2 = 32;
 constexpr int SIZE_F3 = 32;
