@@ -152,24 +152,33 @@ void net_speedtest() {
 	int16_t P1[64] = { };
 	int64_t r = 0;
 
-	cout << "Update test: 40M calls\n";
+	cout << "Update test: 64M calls\n";
 
 	// Update
 	system_clock::time_point time_start = system_clock::now();
 	milliseconds time = milliseconds(0);
 
-	for (int i = 0; i < 10000000; i++) {
-		update_L0(P1, Square(rng.get() & 63), EMPTY, BLACK_P, n);
-		update_L0(P1, Square(rng.get() & 63), EMPTY, WHITE_P, n);
-		update_L0(P1, Square(rng.get() & 63), BLACK_P, WHITE_P, n);
-		update_L0(P1, Square(rng.get() & 63), WHITE_P, BLACK_P, n);
+	Bitboard pieces[3] = {};
+	Piece sq[64] = { };
+	pieces[EMPTY] = FullBoard;
+	for (int j = 0; j < 1000000; j++) {
+		for (int i = 0; i < 64; i++) {
+			Piece p = Piece(rng.get() & 3);
+			if (p == MISC) { p = EMPTY; }
+
+			update_L0(P1, Square(i), sq, p, n);
+
+			pieces[sq[i]] ^= SquareBoard[i];
+			pieces[p] ^= SquareBoard[i];
+			sq[i] = p;
+		}
 	}
 
 	system_clock::time_point time_now = system_clock::now();
 	time = duration_cast<milliseconds>(time_now - time_start);
 
 	cout << "elapsed time: " << time.count() << "ms"
-		<< ", " << double(40000) / time.count() << " MOps" << endl;
+		<< ", " << double(64000) / time.count() << " MOps" << endl;
 
 	cout << "Evaluate test: 10M calls\n";
 

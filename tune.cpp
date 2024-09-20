@@ -65,41 +65,63 @@ void add_double(Net_train* dst, Net_train* src) {
 	src->m.lock();
 	dst->m.lock();
 
-	for (int i = 0; i < SIZE_F0 * SIZE_F1; i++) {
-		dst->L0_a[i] += src->L0_a[i];
-		dst->L0_a[i] = dst->L0_a[i] > 127 ? 127.0 :
-			dst->L0_a[i] < -127 ? -127.0 : dst->L0_a[i];
+	for (int i = 0; i < SIZE_F0 * SIZE_F1; i += 8) {
+		__m256 dst_ = _mm256_load_ps(dst->L0_a + i);
+		__m256 src_ = _mm256_load_ps(src->L0_a + i);
+		dst_ = _mm256_add_ps(dst_, src_);
+		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-127.0f));
+		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(127.0f));
+		_mm256_store_ps(dst->L0_a + i, dst_);
 	}
-	for (int i = 0; i < SIZE_F1; i++) {
-		dst->L0_b[i] += src->L0_b[i];
-		dst->L0_b[i] = dst->L0_b[i] > 16383 ? 16383.0 :
-			dst->L0_b[i] < -16383 ? -16383.0 : dst->L0_b[i];
+	for (int i = 0; i < SIZE_F1; i += 8) {
+		__m256 dst_ = _mm256_load_ps(dst->L0_b + i);
+		__m256 src_ = _mm256_load_ps(src->L0_b + i);
+		dst_ = _mm256_add_ps(dst_, src_);
+		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-16383.0f));
+		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(16383.0f));
+		_mm256_store_ps(dst->L0_b + i, dst_);
 	}
-	for (int i = 0; i < SIZE_F1 * SIZE_F2; i++) {
-		dst->L1_a[i] += src->L1_a[i];
-		dst->L1_a[i] = dst->L1_a[i] > 127 ? 127.0 :
-			dst->L1_a[i] < -127 ? -127.0 : dst->L1_a[i];
+	for (int i = 0; i < SIZE_F1 * SIZE_F2; i += 8) {
+		__m256 dst_ = _mm256_load_ps(dst->L1_a + i);
+		__m256 src_ = _mm256_load_ps(src->L1_a + i);
+		dst_ = _mm256_add_ps(dst_, src_);
+		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-127.0f));
+		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(127.0f));
+		_mm256_store_ps(dst->L1_a + i, dst_);
 	}
-	for (int i = 0; i < SIZE_F2; i++) {
-		dst->L1_b[i] += src->L1_b[i];
-		dst->L1_b[i] = dst->L1_b[i] > 16383 ? 16383.0 :
-			dst->L1_b[i] < -16383 ? -16383.0 : dst->L1_b[i];
+	for (int i = 0; i < SIZE_F2; i += 8) {
+		__m256 dst_ = _mm256_load_ps(dst->L1_b + i);
+		__m256 src_ = _mm256_load_ps(src->L1_b + i);
+		dst_ = _mm256_add_ps(dst_, src_);
+		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-16383.0f));
+		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(16383.0f));
+		_mm256_store_ps(dst->L1_b + i, dst_);
 	}
-	for (int i = 0; i < SIZE_F2 * SIZE_F3; i++) {
-		dst->L2_a[i] += src->L2_a[i];
-		dst->L2_a[i] = dst->L2_a[i] > 127 ? 127.0 :
-			dst->L2_a[i] < -127 ? 127.0 : dst->L2_a[i];
+	for (int i = 0; i < SIZE_F2 * SIZE_F3; i += 8) {
+		__m256 dst_ = _mm256_load_ps(dst->L2_a + i);
+		__m256 src_ = _mm256_load_ps(src->L2_a + i);
+		dst_ = _mm256_add_ps(dst_, src_);
+		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-127.0f));
+		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(127.0f));
+		_mm256_store_ps(dst->L2_a + i, dst_);
 	}
-	for (int i = 0; i < SIZE_F3; i++) {
-		dst->L2_b[i] += src->L2_b[i];
-		dst->L2_b[i] = dst->L2_b[i] > 16383 ? 16383.0 :
-			dst->L2_b[i] < -16383 ? -16383.0 : dst->L2_b[i];
+	for (int i = 0; i < SIZE_F3; i += 8) {
+		__m256 dst_ = _mm256_load_ps(dst->L2_b + i);
+		__m256 src_ = _mm256_load_ps(src->L2_b + i);
+		dst_ = _mm256_add_ps(dst_, src_);
+		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-16383.0f));
+		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(16383.0f));
+		_mm256_store_ps(dst->L2_b + i, dst_);
 	}
-	for (int i = 0; i < SIZE_F3; i++) {
-		dst->L3_a[i] += src->L3_a[i];
-		dst->L3_a[i] = dst->L3_a[i] > 32767 ? 32767.0 :
-			dst->L3_a[i] < -32767 ? -32767.0 : dst->L3_a[i];
+	for (int i = 0; i < SIZE_F3; i += 8) {
+		__m256 dst_ = _mm256_load_ps(dst->L3_a + i);
+		__m256 src_ = _mm256_load_ps(src->L3_a + i);
+		dst_ = _mm256_add_ps(dst_, src_);
+		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-32767.0f));
+		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(32767.0f));
+		_mm256_store_ps(dst->L3_a + i, dst_);
 	}
+
 	dst->L3_b += src->L3_b;
 	dst->L3_b = dst->L3_b > (1 << EVAL_BITS) ? (1 << EVAL_BITS) :
 		dst->L3_b < -(1 << EVAL_BITS) ? -(1 << EVAL_BITS) :
@@ -121,9 +143,9 @@ void backpropagate(Net_train* dst, Position* board,
 	int16_t P3[SIZE_F3];
 	int64_t P;
 
-	double dPdP3R[SIZE_F3];
-	double dPdP2R[SIZE_F2];
-	double dPdP1R[SIZE_F1];
+	float dPdP3R[SIZE_F3];
+	float dPdP2R[SIZE_F2];
+	float dPdP1R[SIZE_F1];
 
 	int16_t *acc = board->get_accumulator();
 	Net* n = board->get_net();
@@ -136,22 +158,32 @@ void backpropagate(Net_train* dst, Position* board,
 	compute_L3(&P, P3, n);
 
 	// -dE/dP = true - curr
-	double _coeff = learning_rate * (score_true - P);
+	float _coeff = learning_rate * (score_true - P);
 	*loss = 1.0 * (score_true - P) * (score_true - P);
 
-	dst->L3_b += _coeff;
+	dst->L3_b += _coeff * (1 << 8);
 
-	for (int i = 0; i < SIZE_F3; i++) {
-		dst->L3_a[i] += _coeff * P3[i];
+	__m256 _coeff256 = _mm256_set1_ps(_coeff);
+
+	for (int i = 0; i < SIZE_F3; i += 8) {
+		__m128i __src16 = _mm_load_si128((__m128i*)(P3 + i));
+		__m256i __src32 = _mm256_cvtepi16_epi32(__src16);
+		__m256 _src = _mm256_cvtepi32_ps(__src32);
+		__m256 _dst = _mm256_load_ps(dst->L3_a + i);
+		
+		_src = _mm256_mul_ps(_coeff256, _src);
+		_dst = _mm256_add_ps(_dst, _src);
+		_mm256_store_ps(dst->L3_a + i, _dst);
+		//dst->L3_a[i] += _coeff * P3[i];
 	}
 
-	for (int i = 0; i < SIZE_F3; i++) {
-		dPdP3R[i] = P3_RAW[i] > 16383 ? 0.0 :
-			P3_RAW[i] < 0 ? 0.0 : 1.0;
+	for (int i = 0; i < SIZE_F3; i ++) {
+		dPdP3R[i] = P3_RAW[i] > 16383 ? 0.01 :
+			P3_RAW[i] < 0 ? 0.01 : 1.0;
 
 		dPdP3R[i] *= n->L3_a[i];
 
-		dst->L2_b[i] += _coeff * dPdP3R[i];
+		dst->L2_b[i] += _coeff * dPdP3R[i] * (1 << 8);
 	}
 
 	for (int j = 0; j < SIZE_F2; j++) {
@@ -161,16 +193,16 @@ void backpropagate(Net_train* dst, Position* board,
 	}
 
 	for (int i = 0; i < SIZE_F2; i++) {
-		double dP2dP2R = P2_RAW[i] > 32512 ? 0.0 :
-			P2_RAW[i] < 0 ? 0.0 : 1.0;
+		double dP2dP2R = P2_RAW[i] > 32512 ? 0.01 :
+			P2_RAW[i] < 0 ? 0.01 : 1.0;
 
 		dPdP2R[i] = 0;
 		for (int k = 0; k < SIZE_F3; k++) {
 			dPdP2R[i] += dPdP3R[k] * n->L2_a[k + i * SIZE_F3];
 		}
-		dPdP2R[i] *= dP2dP2R / 256;
+		dPdP2R[i] *= dP2dP2R / (1 << SHIFT_L1);
 
-		dst->L1_b[i] += _coeff * dPdP2R[i];
+		dst->L1_b[i] += _coeff * dPdP2R[i] * (1 << 8);
 	}
 
 	for (int j = 0; j < SIZE_F1; j++) {
@@ -182,36 +214,105 @@ void backpropagate(Net_train* dst, Position* board,
 	if (board->get_side()) { acc += 32; }
 
 	for (int i = 0; i < SIZE_F1; i++) {
-		double dP1dP1R = acc[i] > 32512 ? 0.0 :
-			acc[i] < 0 ? 0.0 : 1.0;
+		double dP1dP1R = acc[i] > 32512 ? 0.01 :
+			acc[i] < 0 ? 0.01 : 1.0;
 
 		dPdP1R[i] = 0;
 		for (int k = 0; k < SIZE_F2; k++) {
 			dPdP1R[i] += dPdP2R[k] * n->L1_a[k + i * SIZE_F3];
 		}
-		dPdP1R[i] *= dP1dP1R / 256;
+		dPdP1R[i] *= dP1dP1R / (1 << SHIFT_L0);
 
-		dst->L0_b[i] += _coeff * dPdP1R[i];
+		dst->L0_b[i] += _coeff * dPdP1R[i] * (1 << 8);
 	}
 
-	if (!(board->get_side())) {
-		for (int j = 0; j < SIZE_F0 / 2; j++) {
-			for (int i = 0; i < SIZE_F1; i++) {
-				dst->L0_a[2 * i + j * 2 * SIZE_F1    ] += _coeff * dPdP1R[i]
-					* (board->get_piece(Square(j)) == BLACK_P);
-				dst->L0_a[2 * i + j * 2 * SIZE_F1 + 1] += _coeff * dPdP1R[i]
-					* (board->get_piece(Square(j)) == WHITE_P);
+	for (Square s = A1; s < SQ_END; ++s) {
+		Piece p1 = board->get_piece(s);
+		Piece p2;
+		int pair;
+
+		if (p1 == color_to_piece(board->get_side())) {
+		for (int i = 0; i < 32; i += 8) {
+			__m256 _src = _mm256_load_ps(dPdP1R + i);
+			__m256 _dst = _mm256_load_ps(dst->L0_a + 65536 + s * SIZE_F1 + i);
+
+			_src = _mm256_mul_ps(_coeff256, _src);
+			_dst = _mm256_add_ps(_dst, _src);
+			_mm256_store_ps(dst->L0_a + 65536 + s * SIZE_F1 + i, _dst);
+			//dst->L0_a[65536 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
+		}
+		}
+		else if (p1 == ~color_to_piece(board->get_side())) {
+		for (int i = 0; i < 32; i += 8) {
+			__m256 _src = _mm256_load_ps(dPdP1R + i);
+			__m256 _dst = _mm256_load_ps(dst->L0_a + 67584 + s * SIZE_F1 + i);
+
+			_src = _mm256_mul_ps(_coeff256, _src);
+			_dst = _mm256_add_ps(_dst, _src);
+			_mm256_store_ps(dst->L0_a + 67584 + s * SIZE_F1 + i, _dst);
+			//dst->L0_a[67584 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
+		}
+		}
+
+		if (get_file(s) != 7) {
+			p2 = board->get_piece(s + 1);
+			pair = _get_pair(p1, p2, board->get_side());
+			if (pair > -1) {
+			for (int i = 0; i < 32; i += 8) {
+			__m256 _src = _mm256_load_ps(dPdP1R + i);
+			__m256 _dst = _mm256_load_ps(dst->L0_a + 8192 * pair + s * SIZE_F1 + i);
+
+			_src = _mm256_mul_ps(_coeff256, _src);
+			_dst = _mm256_add_ps(_dst, _src);
+			_mm256_store_ps(dst->L0_a + 8192 * pair + s * SIZE_F1 + i, _dst);
+			//dst->L0_a[8192 * pair + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
+			}
 			}
 		}
-	}
-	else {
-		for (int j = 0; j < SIZE_F0 / 2; j++) {
-			for (int i = 0; i < SIZE_F1; i++) {
-				dst->L0_a[2 * i + j * 2 * SIZE_F1    ] += _coeff * dPdP1R[i]
-					* (board->get_piece(Square(j)) == WHITE_P);
-				dst->L0_a[2 * i + j * 2 * SIZE_F1 + 1] += _coeff * dPdP1R[i]
-					* (board->get_piece(Square(j)) == BLACK_P);
+		if (get_rank(s) != 7) {
+		if (get_file(s) != 0) {
+			p2 = board->get_piece(s + 7);
+			pair = _get_pair(p1, p2, board->get_side());
+			if (pair > -1) {
+			for (int i = 0; i < 32; i += 8) {
+			__m256 _src = _mm256_load_ps(dPdP1R + i);
+			__m256 _dst = _mm256_load_ps(dst->L0_a + 8192 * pair + 2048 * 1 + s * SIZE_F1 + i);
+
+			_src = _mm256_mul_ps(_coeff256, _src);
+			_dst = _mm256_add_ps(_dst, _src);
+			_mm256_store_ps(dst->L0_a + 8192 * pair + 2048 * 1 + s * SIZE_F1 + i, _dst);
+			//dst->L0_a[8192 * pair + 2048 * 1 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
 			}
+			}
+		}
+			p2 = board->get_piece(s + 8);
+			pair = _get_pair(p1, p2, board->get_side());
+			if (pair > -1) {
+			for (int i = 0; i < 32; i += 8) {
+			__m256 _src = _mm256_load_ps(dPdP1R + i);
+			__m256 _dst = _mm256_load_ps(dst->L0_a + 8192 * pair + 2048 * 2 + s * SIZE_F1 + i);
+
+			_src = _mm256_mul_ps(_coeff256, _src);
+			_dst = _mm256_add_ps(_dst, _src);
+			_mm256_store_ps(dst->L0_a + 8192 * pair + 2048 * 2 + s * SIZE_F1 + i, _dst);
+			//dst->L0_a[8192 * pair + 2048 * 2 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
+			}
+			}
+		if (get_file(s) != 7) {
+			p2 = board->get_piece(s + 9);
+			pair = _get_pair(p1, p2, board->get_side());
+			if (pair > -1) {
+			for (int i = 0; i < 32; i += 8) {
+			__m256 _src = _mm256_load_ps(dPdP1R + i);
+			__m256 _dst = _mm256_load_ps(dst->L0_a + 8192 * pair + 2048 * 3 + s * SIZE_F1 + i);
+
+			_src = _mm256_mul_ps(_coeff256, _src);
+			_dst = _mm256_add_ps(_dst, _src);
+			_mm256_store_ps(dst->L0_a + 8192 * pair + 2048 * 3 + s * SIZE_F1 + i, _dst);
+			//dst->L0_a[8192 * pair + 2048 * 3 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
+			}
+			}
+		}
 		}
 	}
 
@@ -240,11 +341,9 @@ int _solve_learning(Position* board, int depth)
 
 	// Legal moves
 	else {
-
 		if (depth < 1) { return eval(*board); }
 
 		Square s;
-		int comp_eval;
 		int new_eval = EVAL_INIT;
 
 		for (int i = 0; i < legal_moves.length(); i++) {
@@ -254,7 +353,7 @@ int _solve_learning(Position* board, int depth)
 			Undo u;
 			board->do_move(s, &u);
 
-			comp_eval = -_solve_learning(board, depth - 1);
+			int comp_eval = -_solve_learning(board, depth - 1);
 
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
@@ -269,34 +368,23 @@ int _solve_learning(Position* board, int depth)
 
 int _play_rand(Position* board, PRNG* rng_) 
 {	
-
 	MoveList legal_moves;
 	legal_moves.generate(*board);
 
 	if (legal_moves.list == legal_moves.end) {
-
 		if (board->get_passed()) {
 			return 0;
 		}
 
 		else {
-			Undo* u = new Undo;
-			board->do_null_move(u);
-			u->del = true;
-
+			board->do_null_fast();
 			return 1;
 		}
 	}
 
-	// Legal moves
 	else {
-
 		Square s = legal_moves.list[rng.get() % legal_moves.length()];
-
-		Undo* u = new Undo;
-		board->do_move(s, u);
-		u->del = true;
-
+		board->do_move_fast(s);
 		return 1;
 	}
 }
@@ -336,7 +424,7 @@ int _play_best(Position* board, int find_depth)
 			Undo u;
 			board->do_move(s, &u);
 
-			comp_eval = -_solve_learning(board, find_depth);
+			comp_eval = -_solve_learning(board, 60);
 
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
@@ -363,49 +451,51 @@ void _do_learning_thread(Net_train* src,
 {
 	Net tmp;
 	Net_train dst_;
+	board->set_net(&tmp);
 
 	double loss_total, loss_curr;
 
 	while (!(*stop)) {
 		convert_to_int(&tmp, src);
-		board->set_net(&tmp);
 		memset(&dst_, 0, sizeof(Net_train));
 
-		board->set(startpos_fen_);
-		int depth = 0;
+		for (int rep = 0; rep < THREAD_LOOP; rep++) {
+			board->set(startpos_fen_);
+			int depth = 0;
 
-		while (board->get_count(EMPTY) > find_depth &&
-			_play_rand(board, &p) > 0) { depth++; }
+			while (board->get_count(EMPTY) > find_depth &&
+				_play_rand(board, &p) > 0) {
+				depth++;
+			}
+			board->set_accumulator();
+			int depth_begin = depth;
 
-		int depth_begin = depth;
+			while (board->get_count(EMPTY) > 0 &&
+				_play_best(board, find_depth) > 0) {
+				depth++;
+			}
+			int depth_end = depth;
 
-		while (board->get_count(EMPTY) > 0 &&
-			_play_best(board, find_depth) > 0) { depth++; }
+			int score_true = _solve_learning(board, 60);
 
-		int depth_end = depth;
+			loss_total = 0;
+			while (depth >= depth_begin) {
+				backpropagate(&dst_, board,
+					score_true, &loss_curr, lr);
 
+				loss_total += loss_curr;
 
-		int score_true = _solve_learning(board, 60);
+				if (depth > depth_begin) { board->undo_move(); }
+				score_true = -score_true;
+				depth--;
+			}
+			loss_total /= (depth_end - depth_begin + 1);
 
-		loss_total = 0;
-		while (depth >= depth_begin) {
-			backpropagate(&dst_, board,
-				score_true, &loss_curr, lr);
-
-			loss_total += loss_curr;
-
-			board->undo_move();
-			score_true = -score_true;
-			depth--;
+			*loss = loss_total + (*loss) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
+			(*games)++;
 		}
-		loss_total /= (depth_end - depth_begin + 1);
-
-		*loss = loss_total + (*loss) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
-		(*games)++;
 
 		add_double(src, &dst_);
-
-		while (--depth > 0) { board->undo_move(); }
 	}
 
 }
@@ -464,7 +554,7 @@ void do_learning(Net* dst, Net* src, int64_t games, int threads, int find_depth,
 			<< "Elapsed Time: " << std::setw(12) << time.count() << "ms // "
 			<< "Games: " << std::setw(12) << games_ << " // "
 			<< "Loss: " << loss_ 
-			<< " (" << int(sqrt(loss_ / LOSS_SMOOTH) * 100 / (1 << 23)) << " RMS cd)"
+			<< " (" << int(sqrt(loss_ / LOSS_SMOOTH) * 100 / (1 << (EVAL_BITS - 6))) << " RMS cd)"
 			<< std::endl;
 
 		std::this_thread::sleep_for(milliseconds(3000));

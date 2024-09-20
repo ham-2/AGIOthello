@@ -234,7 +234,7 @@ void Position::set(string fen) {
 
 	// write other data
 	undo_stack->captured = EmptyBoard;
-	compute_L0(undo_stack->accumulator, squares, net);
+	compute_L0(undo_stack->accumulator, squares, pieces, net);
 
 	rebuild();
 }
@@ -259,9 +259,10 @@ void Position::do_move(Square s, Undo* new_undo) {
 	while (captures) {
 		Square c = pop_lsb(&captures);
 		
+		update_L0(new_undo->accumulator, c, squares, p, net);
+
 		squares[c] = p;
 		set_rays(p, c);
-		update_L0(new_undo->accumulator, c, ~p, p, net);
 
 		piece_count[p]++;
 		piece_count[~p]--;
@@ -270,8 +271,9 @@ void Position::do_move(Square s, Undo* new_undo) {
 	}
 
 	// Place the new piece
+	update_L0(new_undo->accumulator, s, squares, p, net);
+
 	place(p, s);
-	update_L0(new_undo->accumulator, s, EMPTY, p, net);
 	new_undo->key ^= piece_keys[p][s];
 	
 	side_to_move = ~side_to_move;
@@ -325,6 +327,33 @@ void Position::undo_null_move() {
 void Position::do_move_wrap(Square s, Undo* new_undo) {
 	if (s == NULL_MOVE) { do_null_move(new_undo); }
 	else { do_move(s, new_undo); }
+}
+
+void Position::do_move_fast(Square s) {
+	undo_stack->pass = false;
+	Bitboard captures = index_captures(s);
+	Piece p = side_to_move ? WHITE_P : BLACK_P;
+
+	pieces[~p] ^= captures;
+	pieces[p] ^= captures;
+
+	while (captures) {
+		Square c = pop_lsb(&captures);
+
+		squares[c] = p;
+		set_rays(p, c);
+
+		piece_count[p]++;
+		piece_count[~p]--;
+	}
+
+	place(p, s);
+	side_to_move = ~side_to_move;
+}
+
+void Position::do_null_fast() {
+	undo_stack->pass = true;
+	side_to_move = ~side_to_move;
 }
 
 Position& Position::operator=(const Position board) {

@@ -69,7 +69,7 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 				s = *(legal_moves.list + index);
 
 				// Adjust alpha to calculate critical moves
-				int lower_alpha = (5 << 23);
+				int lower_alpha = (5 << (EVAL_BITS - 6));
 
 				// Do move
 				Undo u;

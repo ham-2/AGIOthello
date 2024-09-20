@@ -11,22 +11,24 @@
 #include "network.h"
 #include "threads.h"
 
-constexpr int LOSS_SMOOTH = 65536;
+constexpr int LOSS_SMOOTH = 8192;
+constexpr int THREAD_LOOP = 100;
 
 struct Net_train {
 	std::mutex m;
 
-	double L0_a[SIZE_F0 * SIZE_F1];
-	double L0_b[SIZE_F1];
+	alignas(32)
+	float L0_a[SIZE_F0 * SIZE_F1];
+	float L0_b[SIZE_F1];
 
-	double L1_a[SIZE_F1 * SIZE_F2];
-	double L1_b[SIZE_F2];
+	float L1_a[SIZE_F1 * SIZE_F2];
+	float L1_b[SIZE_F2];
 
-	double L2_a[SIZE_F2 * SIZE_F3];
-	double L2_b[SIZE_F3];
+	float L2_a[SIZE_F2 * SIZE_F3];
+	float L2_b[SIZE_F3];
 
-	double L3_a[SIZE_F3];
-	double L3_b;
+	float L3_a[SIZE_F3];
+	float L3_b;
 };
 
 void convert_to_double(Net_train* dst, Net* src);

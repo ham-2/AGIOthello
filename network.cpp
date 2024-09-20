@@ -2,6 +2,8 @@
 
 #include <bitset>
 
+#include <cassert>
+
 // Read / Write / Modify
 
 void load_weights(Net* net, std::string filename)
@@ -67,21 +69,12 @@ void rand_weights(Net* net, int bits) {
 	for (int i = 0; i < SIZE_F0 * SIZE_F1; i++) {
 		net->L0_a[i] += (rng.get() & mask) - (rng.get() & mask);
 	}
-	//for (int i = 0; i < SIZE_F1; i++) {
-	//	net->L0_b[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
-	//}
 	for (int i = 0; i < SIZE_F1 * SIZE_F2; i++) {
 		net->L1_a[i] += (rng.get() & mask) - (rng.get() & mask);
 	}
-	//for (int i = 0; i < SIZE_F2; i++) {
-	//	net->L1_b[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
-	//}
 	for (int i = 0; i < SIZE_F2 * SIZE_F3; i++) {
 		net->L2_a[i] += (rng.get() & mask) - (rng.get() & mask);
 	}
-	//for (int i = 0; i < SIZE_F3; i++) {
-	//	net->L2_b[i] += ((rng.get() & mask) - (rng.get() & mask)) << 8;
-	//}
 	for (int i = 0; i < SIZE_F3; i++) {
 		net->L3_a[i] += (rng.get() & mask) - (rng.get() & mask);
 	}
@@ -89,10 +82,10 @@ void rand_weights(Net* net, int bits) {
 
 void set_weights(Net* net) {
 	zero_weights(net);
-	for (int i = 0; i < 64; i++) {
-		for (int j = 0; j < SIZE_F1 / 2; j++) {
-			net->L0_a[(i << 6) + (j << 2) + 0] = 32;
-			net->L0_a[(i << 6) + (j << 2) + 3] = 32;
+	for (int s = A1; s < SQ_END; s++) {
+		for (int i = 0; i < SIZE_F1; i += 2) {
+			net->L0_a[65536 + s * SIZE_F1 + i] = 64;
+			net->L0_a[67584 + s * SIZE_F1 + i + 1] = 64;
 		}
 	}
 	for (int i = 0; i < 32; i += 2) {
@@ -115,22 +108,20 @@ void set_weights(Net* net) {
 
 // Evaluation
 
-inline static int is_black(Piece p) { return int(p == BLACK_P); }
-inline static int is_white(Piece p) { return int(p == WHITE_P); }
-
 // L0 idx
 // DIR 1 (0)	[8192 * pair + 2048 * dir + sq * SIZE_F1]
 // DIR 7 (1)	
 // DIR 8 (2)	
 // DIR 9 (3)	
 //	EMPTY - US		(0)
-//	US    - EMPTY	(1)
-//	US    - US		(2)
-//	US	  - THEM	(3)
-//	THEM  - US		(4)
-//	THEM  - THEM	(5)
-//	THEM  - EMPTY	(6)
-//	EMPTY - THEM	(7)
+//	EMPTY - THEM	(1)
+//	US    - EMPTY	(2)
+//	US    - US		(3)
+//	US	  - THEM	(4)
+//	THEM  - EMPTY	(5)
+//	THEM  - US		(6)
+//	THEM  - THEM	(7)
+
 // US			[65536 + sq * SIZE_F1]
 // THEM			[67584 + sq * SIZE_F1]
 
@@ -161,14 +152,15 @@ void compute_L0(int16_t* dst, Piece* squares, Bitboard* pieces, Net* n) {
 	for (int pair = 0; pair < 8; pair++) {
 
 	Bitboard bn[4];
-	int p1[8] = { 0, 1, 1, 1, 2, 2, 2, 0 };
-	int p2[8] = { 1, 0, 1, 2, 1, 2, 0, 2 };
-	int pair2 = pair ^ 7;
+	int p1 = (pair + 1) / 3;
+	int p2 = (pair + 1) % 3;
+	int pair2 = ((p1 ^ 3) % 3) * 3 +
+		((p2 ^ 3) % 3) - 1;
 
-	bn[0] = shift<1>(pieces[p1[pair]]) & pieces[p2[pair]];
-	bn[1] = shift<7>(pieces[p1[pair]]) & pieces[p2[pair]];
-	bn[2] = shift<8>(pieces[p1[pair]]) & pieces[p2[pair]];
-	bn[3] = shift<9>(pieces[p1[pair]]) & pieces[p2[pair]];
+	bn[0] = shift<-1>(pieces[p2]) & pieces[p1];
+	bn[1] = shift<-7>(pieces[p2]) & pieces[p1];
+	bn[2] = shift<-8>(pieces[p2]) & pieces[p1];
+	bn[3] = shift<-9>(pieces[p2]) & pieces[p1];
 
 	for (int dir = 0; dir < 4; dir++) {
 		while (bn[dir]) {
@@ -189,7 +181,7 @@ void _sub_L0(int16_t* dst, int addr, Net* n) {
 		__m256i dst_ = _mm256_load_si256((__m256i*)(dst + i));
 		__m256i src_ = _mm256_cvtepi8_epi16(_mm_load_si128((__m128i*)(n->L0_a + addr + i)));
 		dst_ = _mm256_subs_epi16(dst_, src_);
-		_mm256_store_si256((__m256i*)(dst), dst_);
+		_mm256_store_si256((__m256i*)(dst + i), dst_);
 	}
 #else
 	for (int i = 0; i < SIZE_F1; i++) {
@@ -204,7 +196,7 @@ void _add_L0(int16_t* dst, int addr, Net* n) {
 		__m256i dst_ = _mm256_load_si256((__m256i*)(dst + i));
 		__m256i src_ = _mm256_cvtepi8_epi16(_mm_load_si128((__m128i*)(n->L0_a + addr + i)));
 		dst_ = _mm256_adds_epi16(dst_, src_);
-		_mm256_store_si256((__m256i*)(dst), dst_);
+		_mm256_store_si256((__m256i*)(dst + i), dst_);
 	}
 #else
 	for (int i = 0; i < SIZE_F1; i++) {
@@ -213,56 +205,107 @@ void _add_L0(int16_t* dst, int addr, Net* n) {
 #endif
 }
 
-int _get_pair(Piece p1, Piece p2, Color c) {
-	if (!c) {
-		return p1 * 3 + p2 - 1;
+inline int _get_pair(Piece p1, Piece p2, Color c) {
+	return c ? ((p1 ^ 3) % 3) * 3 + ((p2 ^ 3) % 3) - 1 :
+		p1 * 3 + p2 - 1;
+}
+
+void _update_L0(int16_t* dst, int dir, Piece* squares,
+	Square s, Piece from, Piece to, Net* n)
+{
+	if (dir < 0) {
+
+	int offset = (-dir - 1) % 5;
+
+	int pair = _get_pair(squares[s + dir], from, BLACK);
+	if (pair > -1) {
+		_sub_L0(dst          , 8192 * pair + 2048 * offset + (s + dir) * SIZE_F1, n);
+		pair = _get_pair(squares[s + dir], from, WHITE);
+		_sub_L0(dst + SIZE_F1, 8192 * pair + 2048 * offset + (s + dir) * SIZE_F1, n);
+	}
+	pair = _get_pair(squares[s + dir], to, BLACK);
+	if (pair > -1) {
+		_add_L0(dst, 8192 * pair + 2048 * offset + (s + dir) * SIZE_F1, n);
+		pair = _get_pair(squares[s + dir], to, WHITE);
+		_add_L0(dst + SIZE_F1, 8192 * pair + 2048 * offset + (s + dir) * SIZE_F1, n);
+	}
 	}
 	else {
 
+	int offset = (dir - 1) % 5;
+
+	int pair = _get_pair(from, squares[s + dir], BLACK);
+	if (pair > -1) {
+		_sub_L0(dst          , 8192 * pair + 2048 * offset + s * SIZE_F1, n);
+		pair = _get_pair(from, squares[s + dir], WHITE);
+		_sub_L0(dst + SIZE_F1, 8192 * pair + 2048 * offset + s * SIZE_F1, n);
+	}
+
+	pair = _get_pair(to, squares[s + dir], BLACK);
+	if (pair > -1) {
+		_add_L0(dst, 8192 * pair + 2048 * offset + s * SIZE_F1, n);
+		pair = _get_pair(to, squares[s + dir], WHITE);
+		_add_L0(dst + SIZE_F1, 8192 * pair + 2048 * offset + s * SIZE_F1, n);
+	}
 	}
 }
 
 void update_L0(int16_t* dst, Square s, Piece* squares, Piece to, Net* n) {
-	if (squares[s] == EMPTY) 
-	{
-		if (get_rank(s) != 0) {
-			if (get_file(s) != 0) {
+	Piece from = squares[s];
 
-			}
-
-			if (get_file(s) != 7) {
-
-			}
-		}
-		if (get_file(s) != 0) {
-		
-		}
-
-		if (get_file(s) != 7) {
-			
-		}
-		if (get_rank(s) != 7) {
-			if (get_file(s) != 0) {
-
-			}
-
-			if (get_file(s) != 7) {
-
-			}
-		}
-
+	if (from == BLACK_P) {
+		_sub_L0(dst          , s * SIZE_F1 + 65536, n);
+		_sub_L0(dst + SIZE_F1, s * SIZE_F1 + 67584, n);
+	}
+	else if (from == WHITE_P) {
+		_sub_L0(dst          , s * SIZE_F1 + 67584, n);
+		_sub_L0(dst + SIZE_F1, s * SIZE_F1 + 65536, n);
 	}
 
-	else 
-	{
+	if (to == BLACK_P) {
+		_add_L0(dst          , s * SIZE_F1 + 65536, n);
+		_add_L0(dst + SIZE_F1, s * SIZE_F1 + 67584, n);
+	}
+	else if (to == WHITE_P) {
+		_add_L0(dst          , s * SIZE_F1 + 67584, n);
+		_add_L0(dst + SIZE_F1, s * SIZE_F1 + 65536, n);
+	}
 
+	if (get_rank(s) != 0) {
+		if (get_file(s) != 0) {
+			_update_L0(dst, -9, squares, s, from, to, n);
+		}
+
+		_update_L0(dst, -8, squares, s, from, to, n);
+
+		if (get_file(s) != 7) {
+			_update_L0(dst, -7, squares, s, from, to, n);
+		}
+	}
+	if (get_file(s) != 0) {
+		_update_L0(dst, -1, squares, s, from, to, n);
+	}
+
+	if (get_file(s) != 7) {
+		_update_L0(dst, 1, squares, s, from, to, n);
+	}
+	if (get_rank(s) != 7) {
+		if (get_file(s) != 0) {
+			_update_L0(dst, 7, squares, s, from, to, n);
+		}
+
+		_update_L0(dst, 8, squares, s, from, to, n);
+
+		if (get_file(s) != 7) {
+			_update_L0(dst, 9, squares, s, from, to, n);
+		}
 	}
 }
 
 void ReLUClip_L0(int16_t* dst, int16_t* src, Color side_to_move) {
 	if (side_to_move) { src += SIZE_F1; }
 	for (int i = 0; i < SIZE_F1; i++) {
-		dst[i] = src[i] >> 8;
+		dst[i] = src[i] >> SHIFT_L0;
 		dst[i] = dst[i] < 0 ? 0 :
 			dst[i] > 127 ? 127 : dst[i];
 	}
@@ -270,7 +313,7 @@ void ReLUClip_L0(int16_t* dst, int16_t* src, Color side_to_move) {
 
 void ReLUClip_L1(int16_t* dst, int16_t* src) {
 	for (int i = 0; i < SIZE_F2; i++) {
-		dst[i] = src[i] >> 8;
+		dst[i] = src[i] >> SHIFT_L1;
 		dst[i] = dst[i] < 0 ? 0 :
 			dst[i] > 127 ? 127 : dst[i];
 	}
@@ -359,6 +402,8 @@ int compute(int16_t* src, Net* n, Color side_to_move) {
 	ReLUClip_L2(P3, P3);
 	compute_L3(&P4, P3, n);
 
+	assert(P4 > -196609);
+
 	return int(P4);
 }
 
@@ -377,37 +422,26 @@ void verify_SIMD(Net* n) {
 		P1_ACC[i + SIZE_F1] = n->L0_b[i];
 	}
 
+	Bitboard pieces[3] = {};
+	pieces[EMPTY] = FullBoard;
+
 	for (int i = 0; i < 64; i++) {
+		Square s = Square(i % 64);
 		Piece p = Piece(rng.get() & 3);
 		if (p == MISC) { p = EMPTY; }
-		sq[i] = p;
-		update_L0(P1_ACC, Square(i), EMPTY, p, n);
+
+		pieces[sq[s]] ^= SquareBoard[s];
+		pieces[p] ^= SquareBoard[s];
+
+		update_L0(P1_ACC, s, sq, p, n);
+		sq[s] = p;
 	}
 
-	compute_L0(P1_ACC_F, sq, n);
+	compute_L0(P1_ACC_F, sq, pieces, n);
 
 	int p1_err = 0;
 	for (int i = 0; i < SIZE_F1 * 2; i++) {
 		if (P1_ACC[i] != P1_ACC_F[i]) { p1_err++; }
-	}
-
-	for (int j = 0; j < 10000; j++) {
-
-		for (int i = 0; i < 64; i++) {
-			Piece p = Piece(rng.get() & 3);
-			if (p == MISC) { p = EMPTY; }
-			update_L0(P1_ACC, Square(i), sq[i], p, n);
-			sq[i] = p;
-		}
-
-		compute_L0(P1_ACC_F, sq, n);
-
-		for (int i = 0; i < SIZE_F1 * 2; i++) {
-			if (P1_ACC[i] != P1_ACC_F[i]) { 
-				p1_err++;
-			}
-		}
-
 	}
 
 	std::cout << "update_L0 error: " << p1_err << std::endl;

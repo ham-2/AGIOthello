@@ -28,7 +28,10 @@ constexpr int SIZE_F1 = 32;
 constexpr int SIZE_F2 = 32;
 constexpr int SIZE_F3 = 32;
 
-constexpr int EVAL_BITS = 29;
+constexpr int SHIFT_L0 = 5;
+constexpr int SHIFT_L1 = 5;
+
+constexpr int EVAL_BITS = 16;
 
 struct Net {
 
@@ -54,8 +57,9 @@ void set_weights(Net* net);
 void load_weights(Net* net, std::string filename);
 void save_weights(Net* net, std::string filename);
 
-void compute_L0(int16_t* dst, Piece* squares, Net* n);
-void update_L0(int16_t* dst, Square s, Piece from, Piece to, Net* n);
+inline int _get_pair(Piece p1, Piece p2, Color c);
+void compute_L0(int16_t* dst, Piece* squares, Bitboard* pieces, Net* n);
+void update_L0(int16_t* dst, Square s, Piece* squares, Piece to, Net* n);
 void ReLUClip_L0(int16_t* dst, int16_t* src, Color side_to_move);
 void ReLUClip_L1(int16_t* dst, int16_t* src);
 void ReLUClip_L2(int16_t* dst, int16_t* src);

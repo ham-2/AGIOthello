@@ -186,6 +186,8 @@ inline constexpr Piece operator~(Piece p) { return Piece(p ^ 3); }
 inline char print_piece(Piece p) { return FEN_Pieces[p]; }
 bool parse_piece(char c, Piece& p);
 
+inline Piece color_to_piece(Color c) { return c ? WHITE_P : BLACK_P; }
+
 inline std::ostream& operator<<(std::ostream& os, Square s) {
 	if (s == NULL_MOVE) { return os << "00"; }
 	return os << char('a' + get_file(s)) << 1 + get_rank(s);

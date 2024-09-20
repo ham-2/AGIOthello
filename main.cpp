@@ -202,6 +202,14 @@ int main() {
 			net_speedtest();
 		}
 
+		else if (word == "compute") {
+			int16_t acct[32] = { };
+			for (int i = 0; i < 32; i++) {
+				ss >> acct[i];
+			}
+			cout << compute(acct, Threads.n, BLACK) << endl;
+		}
+
 	}
 
 	return 44;

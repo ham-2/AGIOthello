@@ -69,8 +69,9 @@ public:
 	Bitboard get_occupied() { return ~pieces[EMPTY]; }
 	inline bool get_passed() { return undo_stack->pass; }
 	inline int16_t* get_accumulator() { return undo_stack->accumulator; }
-	inline void set_accumulator() { compute_L0(undo_stack->accumulator, squares, net); }
+	inline void set_accumulator() { compute_L0(undo_stack->accumulator, squares, pieces, net); }
 	inline Net* get_net() { return net; }
+	inline int get_eval() { return compute(undo_stack->accumulator, net, side_to_move); }
 
 	// functions for tuning
 	inline void set_net(Net* n) { net = n; }
@@ -88,6 +89,8 @@ public:
 	void do_null_move(Undo* new_undo);
 	void undo_null_move();
 	void do_move_wrap(Square s, Undo* new_undo);
+	void do_move_fast(Square s);
+	void do_null_fast();
 
 	Position& operator=(const Position board);
 
