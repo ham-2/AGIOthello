@@ -210,6 +210,10 @@ int main() {
 			cout << compute(acct, Threads.n, BLACK) << endl;
 		}
 
+		else if (word == "gen") {
+			Threads.gen();
+		}
+
 	}
 
 	return 44;

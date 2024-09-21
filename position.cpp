@@ -49,6 +49,28 @@ void Position::set_rays(Piece p, Square s) {
 	rdiags[rdiag] |= num[p] << get_rdiag_idx(s);
 }
 
+template <int T>
+inline constexpr Bitboard add_captures(Square s, Bitboard us, Bitboard them)
+{
+	Bitboard cand = SquareBoard[s];
+	if (T > 0) {
+		cand |= them & (cand << T);
+		them &=        (them << T);
+		cand |= them & (cand << (2 * T));
+		them &=        (them << (2 * T));
+		cand |= them & (cand << (4 * T));
+	}
+	else {
+		cand |= them & (cand >> -T);
+		them &=        (them >> -T);
+		cand |= them & (cand >> (2 * -T));
+		them &=        (them >> (2 * -T));
+		cand |= them & (cand >> (4 * -T));
+	}
+	cand ^= SquareBoard[s];
+	return (shift<T>(cand) & us) ? cand : EmptyBoard;
+}
+
 Bitboard Position::index_captures(Square s) {
 	// Assumes the square is empty
 	int file = get_file(s);
@@ -250,8 +272,19 @@ void Position::do_move(Square s, Undo* new_undo) {
 
 	// Handle captures
 	Bitboard captures = index_captures(s);
+
 	Piece p = side_to_move ? WHITE_P : BLACK_P;
-	
+
+	//Bitboard captures = EmptyBoard;
+	//captures |= add_captures<-9>(s, pieces[p], pieces[~p] & ~FileBoard[7]);
+	//captures |= add_captures<-8>(s, pieces[p], pieces[~p]);
+	//captures |= add_captures<-7>(s, pieces[p], pieces[~p] & ~FileBoard[0]);
+	//captures |= add_captures<-1>(s, pieces[p], pieces[~p] & ~FileBoard[7]);
+	//captures |= add_captures< 1>(s, pieces[p], pieces[~p] & ~FileBoard[0]);
+	//captures |= add_captures< 7>(s, pieces[p], pieces[~p] & ~FileBoard[7]);
+	//captures |= add_captures< 8>(s, pieces[p], pieces[~p]);
+	//captures |= add_captures< 9>(s, pieces[p], pieces[~p] & ~FileBoard[0]);
+
 	pieces[~p] ^= captures;
 	pieces[p] ^= captures;
 

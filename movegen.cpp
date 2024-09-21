@@ -1,5 +1,26 @@
 #include "movegen.h"
 
+template <int T>
+inline constexpr Bitboard add_moves(Bitboard us, Bitboard them, Bitboard empty)
+{
+	Bitboard cand = us;
+	if (T > 0) {
+		cand |= them & (cand << T);
+		them &=        (them << T);
+		cand |= them & (cand << (2 * T));
+		them &=        (them << (2 * T));
+		cand |= them & (cand << (4 * T));
+	}
+	else {
+		cand |= them & (cand >> -T);
+		them &=        (them >> -T);
+		cand |= them & (cand >> (2 * -T));
+		them &=        (them >> (2 * -T));
+		cand |= them & (cand >> (4 * -T));
+	}
+	return shift<T>(cand & ~us) & empty;
+}
+
 void MoveList::generate(Position& board) {
 	end = list;
 	Piece p = board.get_side() ? WHITE_P : BLACK_P;
@@ -41,62 +62,71 @@ void MoveList::generate(Position& board) {
 	Bitboard them = board.get_pieces(~p);
 	Bitboard empty = board.get_pieces(EMPTY);
 
-	cand = us;
-	cand = shift<-9>(cand) & them;
-	for (int i = 0; i < 6; i++) {
-		cand = shift<-9>(cand);
-		moves |= cand & empty;
-		cand &= them;
-	}
-	cand = us;
-	cand = shift<-8>(cand) & them;
-	for (int i = 0; i < 6; i++) {
-		cand = shift<-8>(cand);
-		moves |= cand & empty;
-		cand &= them;
-	}
-	cand = us;
-	cand = shift<-7>(cand) & them;
-	for (int i = 0; i < 6; i++) {
-		cand = shift<-7>(cand);
-		moves |= cand & empty;
-		cand &= them;
-	}
-	cand = us;
-	cand = shift<-1>(cand) & them;
-	for (int i = 0; i < 6; i++) {
-		cand = shift<-1>(cand);
-		moves |= cand & empty;
-		cand &= them;
-	}
-	cand = us;
-	cand = shift<1>(cand) & them;
-	for (int i = 0; i < 6; i++) {
-		cand = shift<1>(cand);
-		moves |= cand & empty;
-		cand &= them;
-	}
-	cand = us;
-	cand = shift<7>(cand) & them;
-	for (int i = 0; i < 6; i++) {
-		cand = shift<7>(cand);
-		moves |= cand & empty;
-		cand &= them;
-	}
-	cand = us;
-	cand = shift<8>(cand) & them;
-	for (int i = 0; i < 6; i++) {
-		cand = shift<8>(cand);
-		moves |= cand & empty;
-		cand &= them;
-	}
-	cand = us;
-	cand = shift<9>(cand) & them;
-	for (int i = 0; i < 6; i++) {
-		cand = shift<9>(cand);
-		moves |= cand & empty;
-		cand &= them;
-	}
+	moves |= add_moves<-9>(us, them & ~FileBoard[7], empty);
+	moves |= add_moves<-8>(us, them, empty);
+	moves |= add_moves<-7>(us, them & ~FileBoard[0], empty);
+	moves |= add_moves<-1>(us, them & ~FileBoard[7], empty);
+	moves |= add_moves< 1>(us, them & ~FileBoard[0], empty);
+	moves |= add_moves< 7>(us, them & ~FileBoard[7], empty);
+	moves |= add_moves< 8>(us, them, empty);
+	moves |= add_moves< 9>(us, them & ~FileBoard[0], empty);
+
+	//cand = us;
+	//cand = shift<-9>(cand) & them;
+	//for (int i = 0; i < 6; i++) {
+	//	cand = shift<-9>(cand);
+	//	moves |= cand & empty;
+	//	cand &= them;
+	//}
+	//cand = us;
+	//cand = shift<-8>(cand) & them;
+	//for (int i = 0; i < 6; i++) {
+	//	cand = shift<-8>(cand);
+	//	moves |= cand & empty;
+	//	cand &= them;
+	//}
+	//cand = us;
+	//cand = shift<-7>(cand) & them;
+	//for (int i = 0; i < 6; i++) {
+	//	cand = shift<-7>(cand);
+	//	moves |= cand & empty;
+	//	cand &= them;
+	//}
+	//cand = us;
+	//cand = shift<-1>(cand) & them;
+	//for (int i = 0; i < 6; i++) {
+	//	cand = shift<-1>(cand);
+	//	moves |= cand & empty;
+	//	cand &= them;
+	//}
+	//cand = us;
+	//cand = shift<1>(cand) & them;
+	//for (int i = 0; i < 6; i++) {
+	//	cand = shift<1>(cand);
+	//	moves |= cand & empty;
+	//	cand &= them;
+	//}
+	//cand = us;
+	//cand = shift<7>(cand) & them;
+	//for (int i = 0; i < 6; i++) {
+	//	cand = shift<7>(cand);
+	//	moves |= cand & empty;
+	//	cand &= them;
+	//}
+	//cand = us;
+	//cand = shift<8>(cand) & them;
+	//for (int i = 0; i < 6; i++) {
+	//	cand = shift<8>(cand);
+	//	moves |= cand & empty;
+	//	cand &= them;
+	//}
+	//cand = us;
+	//cand = shift<9>(cand) & them;
+	//for (int i = 0; i < 6; i++) {
+	//	cand = shift<9>(cand);
+	//	moves |= cand & empty;
+	//	cand &= them;
+	//}
 
 	b = moves;
 
