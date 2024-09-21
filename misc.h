@@ -14,14 +14,13 @@
 #include <x86intrin.h>
 #endif
 
-#if defined _BMI2_
+#ifdef _BMI2_
 #include <immintrin.h>
 inline uint64_t deposit_bits(uint8_t src, uint64_t mask) {
 	return _pdep_u64(src, mask);
 }
-#else
-inline uint64_t deposit_bits(uint8_t src, uint64_t mask) {
-
+inline uint64_t extract_bits(uint64_t src, uint64_t mask) {
+	return _pext_u64(src, mask);
 }
 #endif
 

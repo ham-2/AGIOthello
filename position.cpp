@@ -31,65 +31,48 @@ void Position::clear_stack() {
 	while (undo_stack->prev != nullptr) { pop_stack(); }
 }
 
-void Position::set_rays(Piece p, Square s) {
-	int file = get_file(s);
-	int rank = get_rank(s);
-	int ldiag = get_ldiag(s);
-	int rdiag = get_rdiag(s);
-	int num[3] = { 0, 256, 257 };
-
-	files[file] &= Masks[rank];
-	files[file] |= num[p] << rank;
-	ranks[rank] &= Masks[file];
-	ranks[rank] |= num[p] << file;
-
-	ldiags[ldiag] &= Masks[get_ldiag_idx(s)];
-	ldiags[ldiag] |= num[p] << get_ldiag_idx(s);
-	rdiags[rdiag] &= Masks[get_rdiag_idx(s)];
-	rdiags[rdiag] |= num[p] << get_rdiag_idx(s);
-}
-
 template <int T>
 inline constexpr Bitboard add_captures(Square s, Bitboard us, Bitboard them)
 {
 	Bitboard cand = SquareBoard[s];
 	if (T > 0) {
 		cand |= them & (cand << T);
-		them &=        (them << T);
+		them &= (them << T);
 		cand |= them & (cand << (2 * T));
-		them &=        (them << (2 * T));
+		them &= (them << (2 * T));
 		cand |= them & (cand << (4 * T));
 	}
 	else {
 		cand |= them & (cand >> -T);
-		them &=        (them >> -T);
+		them &= (them >> -T);
 		cand |= them & (cand >> (2 * -T));
-		them &=        (them >> (2 * -T));
+		them &= (them >> (2 * -T));
 		cand |= them & (cand >> (4 * -T));
 	}
 	cand ^= SquareBoard[s];
 	return (shift<T>(cand) & us) ? cand : EmptyBoard;
 }
 
-Bitboard Position::index_captures(Square s) {
+Bitboard Position::index_captures(Square s, Piece p) {
+#ifdef _BMI2_
 	// Assumes the square is empty
 	int file = get_file(s);
 	int rank = get_rank(s);
 	int ldiag = get_ldiag(s);
 	int rdiag = get_rdiag(s);
-	
-	uint16_t f_idx = files[file] | 1 << rank;
-	uint16_t r_idx = ranks[rank] | 1 << file;
-	uint16_t ld_idx = ldiags[ldiag] | 1 << get_ldiag_idx(s);
-	uint16_t rd_idx = rdiags[rdiag] | 1 << get_rdiag_idx(s);
 
-	// need to flip idx's when white
-	if (side_to_move) {
-		f_idx ^= (f_idx >> 8);
-		r_idx ^= (r_idx >> 8);
-		ld_idx ^= (ld_idx >> 8);
-		rd_idx ^= (rd_idx >> 8);
-	}
+	Bitboard upper = ~pieces[EMPTY]; // occupied bits
+	Bitboard lower = pieces[~p] | SquareBoard[s]; // them bits + set(misc)
+
+	uint16_t f_idx  = extract_bits(upper, FileBoard[file]) << 8;
+	uint16_t r_idx  = extract_bits(upper, RankBoard[rank]) << 8;
+	uint16_t ld_idx = extract_bits(upper, LDiagBoard[ldiag]) << 8;
+	uint16_t rd_idx = extract_bits(upper, RDiagBoard[rdiag]) << 8;
+
+	f_idx  |= extract_bits(lower, FileBoard[file]);
+	r_idx  |= extract_bits(lower, RankBoard[rank]);
+	ld_idx |= extract_bits(lower, LDiagBoard[ldiag]);
+	rd_idx |= extract_bits(lower, RDiagBoard[rdiag]);
 
 	uint8_t file_c = Captures[f_idx];
 	uint8_t rank_c = Captures[r_idx];
@@ -98,6 +81,20 @@ Bitboard Position::index_captures(Square s) {
 
 	return to_file(file_c, file) | to_rank(rank_c, rank) |
 		to_ldiag(ldiag_c, ldiag) | to_rdiag(rdiag_c, rdiag);
+#else
+	Bitboard captures = EmptyBoard;
+
+	captures |= add_captures<-9>(s, pieces[p], pieces[~p] & ~FileBoard[7]);
+	captures |= add_captures<-8>(s, pieces[p], pieces[~p]);
+	captures |= add_captures<-7>(s, pieces[p], pieces[~p] & ~FileBoard[0]);
+	captures |= add_captures<-1>(s, pieces[p], pieces[~p] & ~FileBoard[7]);
+	captures |= add_captures< 1>(s, pieces[p], pieces[~p] & ~FileBoard[0]);
+	captures |= add_captures< 7>(s, pieces[p], pieces[~p] & ~FileBoard[7]);
+	captures |= add_captures< 8>(s, pieces[p], pieces[~p]);
+	captures |= add_captures< 9>(s, pieces[p], pieces[~p] & ~FileBoard[0]);
+	
+	return captures;
+#endif
 }
 
 // place/remove/move functions - dont handle key xor
@@ -105,8 +102,6 @@ inline void Position::place(Piece p, Square s) {
 	squares[s] = p;
 	pieces[p] ^= SquareBoard[s];
 	pieces[EMPTY] ^= SquareBoard[s];
-
-	set_rays(p, s);
 
 	piece_count[EMPTY]--;
 	piece_count[p]++;
@@ -117,16 +112,12 @@ inline void Position::remove(Piece p, Square s) {
 	pieces[p] ^= SquareBoard[s];
 	pieces[EMPTY] ^= SquareBoard[s];
 
-	set_rays(EMPTY, s);
-
 	piece_count[EMPTY]++;
 	piece_count[p]--;
 }
 
 void Position::rebuild() { // computes others from squares data.
 	for (int i = 0; i < 3; i++) { pieces[i] = 0; piece_count[i] = 0; }
-	for (int i = 0; i < 8; i++) { files[i] = 0; ranks[i] = 0; }
-	for (int i = 0; i < 15; i++) { ldiags[i] = 0; rdiags[i] = 0; }
 	
 	// set EMPTYs to full
 	piece_count[EMPTY] = 64;
@@ -167,24 +158,6 @@ void Position::verify() {
 
 		if (i != 0 && testpos.piece_count[i] != piece_count[i]) {
 			cout << "Piece count inconsistent at " << i << endl;
-		}
-	}
-
-	for (int i = 0; i < 8; i++) { 
-		if (testpos.files[i] != files[i]) {
-			cout << "Files inconsistent at " << i << endl;
-		}
-		if (testpos.ranks[i] != ranks[i]) {
-			cout << "Ranks inconsistent at " << i << endl;
-		}
-	}
-
-	for (int i = 0; i < 15; i++) { 
-		if (testpos.ldiags[i] != ldiags[i]) {
-			cout << "Ldiags inconsistent at " << i << endl;
-		}
-		if (testpos.rdiags[i] != rdiags[i]) {
-			cout << "Rdiags inconsistent at " << i << endl;
 		}
 	}
 
@@ -271,19 +244,8 @@ void Position::do_move(Square s, Undo* new_undo) {
 	undo_stack = new_undo;
 
 	// Handle captures
-	Bitboard captures = index_captures(s);
-
 	Piece p = side_to_move ? WHITE_P : BLACK_P;
-
-	//Bitboard captures = EmptyBoard;
-	//captures |= add_captures<-9>(s, pieces[p], pieces[~p] & ~FileBoard[7]);
-	//captures |= add_captures<-8>(s, pieces[p], pieces[~p]);
-	//captures |= add_captures<-7>(s, pieces[p], pieces[~p] & ~FileBoard[0]);
-	//captures |= add_captures<-1>(s, pieces[p], pieces[~p] & ~FileBoard[7]);
-	//captures |= add_captures< 1>(s, pieces[p], pieces[~p] & ~FileBoard[0]);
-	//captures |= add_captures< 7>(s, pieces[p], pieces[~p] & ~FileBoard[7]);
-	//captures |= add_captures< 8>(s, pieces[p], pieces[~p]);
-	//captures |= add_captures< 9>(s, pieces[p], pieces[~p] & ~FileBoard[0]);
+	Bitboard captures = index_captures(s, p);
 
 	pieces[~p] ^= captures;
 	pieces[p] ^= captures;
@@ -292,10 +254,9 @@ void Position::do_move(Square s, Undo* new_undo) {
 	while (captures) {
 		Square c = pop_lsb(&captures);
 		
-		update_L0(new_undo->accumulator, c, squares, p, net);
+		//update_L0(new_undo->accumulator, c, squares, p, net);
 
 		squares[c] = p;
-		set_rays(p, c);
 
 		piece_count[p]++;
 		piece_count[~p]--;
@@ -304,7 +265,7 @@ void Position::do_move(Square s, Undo* new_undo) {
 	}
 
 	// Place the new piece
-	update_L0(new_undo->accumulator, s, squares, p, net);
+	//update_L0(new_undo->accumulator, s, squares, p, net);
 
 	place(p, s);
 	new_undo->key ^= piece_keys[p][s];
@@ -327,7 +288,6 @@ void Position::undo_move() {
 	while (captured) {
 		Square c = pop_lsb(&captured);
 		squares[c] = p;
-		set_rays(p, c);
 
 		piece_count[p]++;
 		piece_count[~p]--;
@@ -364,9 +324,10 @@ void Position::do_move_wrap(Square s, Undo* new_undo) {
 
 void Position::do_move_fast(Square s) {
 	undo_stack->pass = false;
-	Bitboard captures = index_captures(s);
-	Piece p = side_to_move ? WHITE_P : BLACK_P;
 
+	Piece p = side_to_move ? WHITE_P : BLACK_P;
+	Bitboard captures = index_captures(s, p);
+	
 	pieces[~p] ^= captures;
 	pieces[p] ^= captures;
 
@@ -374,7 +335,6 @@ void Position::do_move_fast(Square s) {
 		Square c = pop_lsb(&captures);
 
 		squares[c] = p;
-		set_rays(p, c);
 
 		piece_count[p]++;
 		piece_count[~p]--;

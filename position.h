@@ -35,10 +35,6 @@ private:
 
 	Bitboard pieces[3];
 	int piece_count[3];
-	uint16_t files[8];
-	uint16_t ranks[8];
-	uint16_t ldiags[15];
-	uint16_t rdiags[15];
 	Color side_to_move;
 
 	Net* net;
@@ -46,8 +42,7 @@ private:
 	void pop_stack();
 	void clear_stack();
 
-	void set_rays(Piece p, Square s);
-	Bitboard index_captures(Square s);
+	Bitboard index_captures(Square s, Piece p);
 
 	void place(Piece p, Square s);
 	void remove(Piece p, Square s);
@@ -75,12 +70,6 @@ public:
 
 	// functions for tuning
 	inline void set_net(Net* n) { net = n; }
-
-	// functions for movegen
-	inline uint16_t get_files(int i) { return files[i]; }
-	inline uint16_t get_ranks(int i) { return ranks[i]; }
-	inline uint16_t get_ldiags(int i) { return ldiags[i]; }
-	inline uint16_t get_rdiags(int i) { return rdiags[i]; }
 
 	void show();
 	void set(string fen);

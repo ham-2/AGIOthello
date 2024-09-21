@@ -26,37 +26,37 @@ void MoveList::generate(Position& board) {
 	Piece p = board.get_side() ? WHITE_P : BLACK_P;
 	
 	// Rays Lookup
-	/*Bitboard moves = EmptyBoard;
-		
-	int idx = 0;
-	uint16_t ray = 0;
-	for (int file = 0; file < 8; file++) {
-		ray = board.get_files(file);
-		idx = board.get_side() ? ray ^ (ray >> 8) : ray;
-		
-		moves |= to_file(Captures[idx], file);
-	}
-	for (int rank = 0; rank < 8; rank++) {
-		ray = board.get_ranks(rank);
-		idx = board.get_side() ? ray ^ (ray >> 8) : ray;
+	//Bitboard moves = EmptyBoard;
+	//Bitboard upper = ~board.get_pieces(EMPTY);
+	//Bitboard lower = board.get_side() ? 
+	//	board.get_pieces(BLACK_P) : board.get_pieces(WHITE_P);
 
-		moves |= to_rank(Captures[idx], rank);
-	}
-	for (int ldiag = 0; ldiag < 15; ldiag++) {
-		ray = board.get_ldiags(ldiag);
-		idx = board.get_side() ? ray ^ (ray >> 8) : ray;
+	//for (int file = 0; file < 8; file++) {
+	//	uint16_t idx = extract_bits(upper, FileBoard[file]) << 8;
+	//	idx |= extract_bits(lower, FileBoard[file]);
 
-		moves |= to_ldiag(Captures[idx], ldiag);
-	}
-	for (int rdiag = 0; rdiag < 15; rdiag++) {
-		ray = board.get_rdiags(rdiag);
-		idx = board.get_side() ? ray ^ (ray >> 8) : ray;
+	//	moves |= to_file(Captures[idx], file);
+	//}
+	//for (int rank = 0; rank < 8; rank++) {
+	//	uint16_t idx = extract_bits(upper, RankBoard[rank]) << 8;
+	//	idx |= extract_bits(lower, RankBoard[rank]);
 
-		moves |= to_rdiag(Captures[idx], rdiag);
-	}*/
+	//	moves |= to_rank(Captures[idx], rank);
+	//}
+	//for (int ldiag = 0; ldiag < 15; ldiag++) {
+	//	uint16_t idx = extract_bits(upper, LDiagBoard[ldiag]) << 8;
+	//	idx |= extract_bits(lower, LDiagBoard[ldiag]);
+
+	//	moves |= to_ldiag(Captures[idx], ldiag);
+	//}
+	//for (int rdiag = 0; rdiag < 15; rdiag++) {
+	//	uint16_t idx = extract_bits(upper, RDiagBoard[rdiag]) << 8;
+	//	idx |= extract_bits(lower, RDiagBoard[rdiag]);
+
+	//	moves |= to_rdiag(Captures[idx], rdiag);
+	//}
 
 	// Bitboard Method
-	Bitboard cand = EmptyBoard;
 	Bitboard moves = EmptyBoard;
 	Bitboard us = board.get_pieces(p);
 	Bitboard them = board.get_pieces(~p);
@@ -70,63 +70,6 @@ void MoveList::generate(Position& board) {
 	moves |= add_moves< 7>(us, them & ~FileBoard[7], empty);
 	moves |= add_moves< 8>(us, them, empty);
 	moves |= add_moves< 9>(us, them & ~FileBoard[0], empty);
-
-	//cand = us;
-	//cand = shift<-9>(cand) & them;
-	//for (int i = 0; i < 6; i++) {
-	//	cand = shift<-9>(cand);
-	//	moves |= cand & empty;
-	//	cand &= them;
-	//}
-	//cand = us;
-	//cand = shift<-8>(cand) & them;
-	//for (int i = 0; i < 6; i++) {
-	//	cand = shift<-8>(cand);
-	//	moves |= cand & empty;
-	//	cand &= them;
-	//}
-	//cand = us;
-	//cand = shift<-7>(cand) & them;
-	//for (int i = 0; i < 6; i++) {
-	//	cand = shift<-7>(cand);
-	//	moves |= cand & empty;
-	//	cand &= them;
-	//}
-	//cand = us;
-	//cand = shift<-1>(cand) & them;
-	//for (int i = 0; i < 6; i++) {
-	//	cand = shift<-1>(cand);
-	//	moves |= cand & empty;
-	//	cand &= them;
-	//}
-	//cand = us;
-	//cand = shift<1>(cand) & them;
-	//for (int i = 0; i < 6; i++) {
-	//	cand = shift<1>(cand);
-	//	moves |= cand & empty;
-	//	cand &= them;
-	//}
-	//cand = us;
-	//cand = shift<7>(cand) & them;
-	//for (int i = 0; i < 6; i++) {
-	//	cand = shift<7>(cand);
-	//	moves |= cand & empty;
-	//	cand &= them;
-	//}
-	//cand = us;
-	//cand = shift<8>(cand) & them;
-	//for (int i = 0; i < 6; i++) {
-	//	cand = shift<8>(cand);
-	//	moves |= cand & empty;
-	//	cand &= them;
-	//}
-	//cand = us;
-	//cand = shift<9>(cand) & them;
-	//for (int i = 0; i < 6; i++) {
-	//	cand = shift<9>(cand);
-	//	moves |= cand & empty;
-	//	cand &= them;
-	//}
 
 	b = moves;
 

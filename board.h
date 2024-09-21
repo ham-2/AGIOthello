@@ -105,6 +105,7 @@ inline Bitboard get_fileboard(Square s) { return FileBoard[get_file(s)]; }
 inline Bitboard get_rankboard(Square s) { return RankBoard[get_rank(s)]; }
 
 // Deposit functions to convert Captures value to Bitboard
+#ifdef _BMI2_
 inline Bitboard to_rank(uint8_t src, int index) {
 	return Bitboard(src) << (8 * index);
 }
@@ -117,6 +118,7 @@ inline Bitboard to_ldiag(uint8_t src, int index) {
 inline Bitboard to_rdiag(uint8_t src, int index) {
 	return deposit_bits(src, RDiagBoard[index]);
 }
+#endif
 
 #if defined _POPCNT64_
 inline int popcount(Bitboard b) {

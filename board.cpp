@@ -55,7 +55,8 @@ namespace Board {
 			RDiagBoard[8 + i] = shift< 1>(RDiagBoard[7 + i]);
 		}
 
-		// Legal Moves Table
+#ifdef _BMI2_
+		// Capture Table
 		// Index: 16 bits
 		// = 8 bits (occupied)
 		// + 8 bits (us / them if occupied, empty / move if empty)
@@ -65,66 +66,7 @@ namespace Board {
 		int index;
 
 		memset(Captures, 0, sizeof(Captures));
-		for (sq[7] = 0; sq[7] < 3; sq[7]++) {
-			index &= Masks[7];
-			index |= idx_helper[sq[7]] << 7;
-		for (sq[6] = 0; sq[6] < 3; sq[6]++) {
-			index &= Masks[6];
-			index |= idx_helper[sq[6]] << 6;
-		for (sq[5] = 0; sq[5] < 3; sq[5]++) {
-			index &= Masks[5];
-			index |= idx_helper[sq[5]] << 5;
-		for (sq[4] = 0; sq[4] < 3; sq[4]++) {
-			index &= Masks[4];
-			index |= idx_helper[sq[4]] << 4;
-		for (sq[3] = 0; sq[3] < 3; sq[3]++) {
-			index &= Masks[3];
-			index |= idx_helper[sq[3]] << 3;
-		for (sq[2] = 0; sq[2] < 3; sq[2]++) {
-			index &= Masks[2];
-			index |= idx_helper[sq[2]] << 2;
-		for (sq[1] = 0; sq[1] < 3; sq[1]++) {
-			index &= Masks[1];
-			index |= idx_helper[sq[1]] << 1;
-		for (sq[0] = 0; sq[0] < 3; sq[0]++) {
-			index &= Masks[0];
-			index |= idx_helper[sq[0]] << 0;
 
-			uint8_t legal_moves = 0;
-			
-			uint8_t us = (index >> 8) & (~index);
-			uint8_t them = (index >> 8) & (index);
-			uint8_t empty = (~(index >> 8)) & (~index);
-			uint8_t cand = 0;
-			uint8_t moves = 0;
-			// Capture to the left
-			cand = us;
-			cand = (cand >> 1) & them;
-			for (int i = 0; i < 6; i++) {
-				cand >>= 1;
-				moves |= cand & empty;
-				cand &= them;
-			}
-			// Capture to the right
-			cand = us;
-			cand = (cand << 1) & them;
-			for (int i = 0; i < 6; i++) {
-				cand <<= 1;
-				moves |= cand & empty;
-				cand &= them;
-			}
-			
-			Captures[index] = moves;
-		}
-		}
-		}
-		}
-		}
-		}
-		}
-		}
-
-		// Capture Table
 		for (int i = 0; i < 8; i++) { // Move Square
 			for (sq[7] = 0; sq[7] < 3; sq[7]++) {
 				index &= Masks[7];
@@ -176,6 +118,7 @@ namespace Board {
 			}
 			}
 		}
+#endif
 
 #ifdef _POPCNT_HELPER_
 		for (int i = 0; i < 256; i++) {
