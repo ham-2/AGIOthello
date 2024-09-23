@@ -24,37 +24,6 @@ inline constexpr Bitboard add_moves(Bitboard us, Bitboard them, Bitboard empty)
 void MoveList::generate(Position& board) {
 	end = list;
 	Piece p = board.get_side() ? WHITE_P : BLACK_P;
-	
-	// Rays Lookup
-	//Bitboard moves = EmptyBoard;
-	//Bitboard upper = ~board.get_pieces(EMPTY);
-	//Bitboard lower = board.get_side() ? 
-	//	board.get_pieces(BLACK_P) : board.get_pieces(WHITE_P);
-
-	//for (int file = 0; file < 8; file++) {
-	//	uint16_t idx = extract_bits(upper, FileBoard[file]) << 8;
-	//	idx |= extract_bits(lower, FileBoard[file]);
-
-	//	moves |= to_file(Captures[idx], file);
-	//}
-	//for (int rank = 0; rank < 8; rank++) {
-	//	uint16_t idx = extract_bits(upper, RankBoard[rank]) << 8;
-	//	idx |= extract_bits(lower, RankBoard[rank]);
-
-	//	moves |= to_rank(Captures[idx], rank);
-	//}
-	//for (int ldiag = 0; ldiag < 15; ldiag++) {
-	//	uint16_t idx = extract_bits(upper, LDiagBoard[ldiag]) << 8;
-	//	idx |= extract_bits(lower, LDiagBoard[ldiag]);
-
-	//	moves |= to_ldiag(Captures[idx], ldiag);
-	//}
-	//for (int rdiag = 0; rdiag < 15; rdiag++) {
-	//	uint16_t idx = extract_bits(upper, RDiagBoard[rdiag]) << 8;
-	//	idx |= extract_bits(lower, RDiagBoard[rdiag]);
-
-	//	moves |= to_rdiag(Captures[idx], rdiag);
-	//}
 
 	// Bitboard Method
 	Bitboard moves = EmptyBoard;

@@ -6,3 +6,5 @@ idea: always rotate board to make some condition true?
 check if we can get complete pv
 
 #includes
+
+compute US - THEM and THEM - US at loading and optimize update_L0

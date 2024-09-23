@@ -1,6 +1,9 @@
 #include "tune.h"
 
-void convert_to_double(Net_train* dst, Net* src) 
+constexpr int LOSS_SMOOTH = 8192;
+constexpr int THREAD_LOOP = 8;
+
+void convert_to_float(Net_train* dst, Net* src) 
 {
 	dst->m.lock();
 
@@ -60,7 +63,7 @@ void convert_to_int(Net* dst, Net_train* src)
 	src->m.unlock();
 }
 
-void add_double(Net_train* dst, Net_train* src) {
+void add_float(Net_train* dst, Net_train* src) {
 
 	src->m.lock();
 	dst->m.lock();
@@ -147,21 +150,21 @@ void backpropagate(Net_train* dst, Position* board,
 	float dPdP2R[SIZE_F2];
 	float dPdP1R[SIZE_F1];
 
-	int16_t *acc = board->get_accumulator();
+	int16_t *acc = board->get_accumulator() + (board->get_side() ? SIZE_F1 : 0);
 	Net* n = board->get_net();
-	
-	ReLUClip_L0(P1, acc, board->get_side());
-	compute_layer(P2_RAW, P1, n->L1_a, n->L1_b);
-	ReLUClip_L1(P2, P2_RAW);
-	compute_layer(P3_RAW, P2, n->L2_a, n->L2_b);
-	ReLUClip_L2(P3, P3_RAW);
+
+	ReLUClip<SIZE_F1, SHIFT_L0, 127>(P1, acc);
+	compute_layer<SIZE_F2, SIZE_F1>(P2_RAW, P1, n->L1_a, n->L1_b);
+	ReLUClip<SIZE_F2, SHIFT_L1, 127>(P2, P2_RAW);
+	compute_layer<SIZE_F3, SIZE_F2>(P3_RAW, P2, n->L2_a, n->L2_b);
+	ReLUClip<SIZE_F3, SHIFT_L2, 2047>(P3, P3_RAW);
 	compute_L3(&P, P3, n);
 
 	// -dE/dP = true - curr
 	float _coeff = learning_rate * (score_true - P);
 	*loss = 1.0 * (score_true - P) * (score_true - P);
 
-	dst->L3_b += _coeff * (1 << 8);
+	dst->L3_b += _coeff;
 
 	__m256 _coeff256 = _mm256_set1_ps(_coeff);
 
@@ -174,16 +177,15 @@ void backpropagate(Net_train* dst, Position* board,
 		_src = _mm256_mul_ps(_coeff256, _src);
 		_dst = _mm256_add_ps(_dst, _src);
 		_mm256_store_ps(dst->L3_a + i, _dst);
-		//dst->L3_a[i] += _coeff * P3[i];
 	}
 
 	for (int i = 0; i < SIZE_F3; i ++) {
-		dPdP3R[i] = P3_RAW[i] > 16383 ? 0.01 :
-			P3_RAW[i] < 0 ? 0.01 : 1.0;
+		dPdP3R[i] = P3_RAW[i] > (1023 << SHIFT_L2) ? 0.0 :
+			P3_RAW[i] < 0 ? 0.0 : 1.0;
 
-		dPdP3R[i] *= n->L3_a[i];
+		dPdP3R[i] *= n->L3_a[i] / (1 << SHIFT_L2);
 
-		dst->L2_b[i] += _coeff * dPdP3R[i] * (1 << 8);
+		dst->L2_b[i] += _coeff * dPdP3R[i];
 	}
 
 	for (int j = 0; j < SIZE_F2; j++) {
@@ -193,8 +195,8 @@ void backpropagate(Net_train* dst, Position* board,
 	}
 
 	for (int i = 0; i < SIZE_F2; i++) {
-		double dP2dP2R = P2_RAW[i] > 32512 ? 0.01 :
-			P2_RAW[i] < 0 ? 0.01 : 1.0;
+		double dP2dP2R = P2_RAW[i] > (127 << SHIFT_L1) ? 0.0 :
+			P2_RAW[i] < 0 ? 0.0 : 1.0;
 
 		dPdP2R[i] = 0;
 		for (int k = 0; k < SIZE_F3; k++) {
@@ -202,7 +204,7 @@ void backpropagate(Net_train* dst, Position* board,
 		}
 		dPdP2R[i] *= dP2dP2R / (1 << SHIFT_L1);
 
-		dst->L1_b[i] += _coeff * dPdP2R[i] * (1 << 8);
+		dst->L1_b[i] += _coeff * dPdP2R[i];
 	}
 
 	for (int j = 0; j < SIZE_F1; j++) {
@@ -210,112 +212,37 @@ void backpropagate(Net_train* dst, Position* board,
 			dst->L1_a[i + j * SIZE_F2] += _coeff * dPdP2R[i] * P1[j];
 		}
 	}
-	
-	if (board->get_side()) { acc += 32; }
 
 	for (int i = 0; i < SIZE_F1; i++) {
-		double dP1dP1R = acc[i] > 32512 ? 0.01 :
-			acc[i] < 0 ? 0.01 : 1.0;
+		double dP1dP1R = acc[i] > (127 << SHIFT_L0) ? 0.0 :
+			acc[i] < 0 ? 0.0 : 1.0;
 
 		dPdP1R[i] = 0;
 		for (int k = 0; k < SIZE_F2; k++) {
-			dPdP1R[i] += dPdP2R[k] * n->L1_a[k + i * SIZE_F3];
+			dPdP1R[i] += dPdP2R[k] * n->L1_a[k + i * SIZE_F2];
 		}
 		dPdP1R[i] *= dP1dP1R / (1 << SHIFT_L0);
 
-		dst->L0_b[i] += _coeff * dPdP1R[i] * (1 << 8);
+		dst->L0_b[i] += _coeff * dPdP1R[i];
 	}
+
+	Piece us = board->get_side() ? WHITE_P : BLACK_P;
 
 	for (Square s = A1; s < SQ_END; ++s) {
-		Piece p1 = board->get_piece(s);
-		Piece p2;
-		int pair;
+		if (board->get_piece(s) == EMPTY) {	continue; }
 
-		if (p1 == color_to_piece(board->get_side())) {
-		for (int i = 0; i < 32; i += 8) {
+		int addr = board->get_piece(s) == us ?
+			s * SIZE_F1 : s * SIZE_F1 + L0_OFFSET;
+
+		for (int i = 0; i < SIZE_F1; i += 8) {
 			__m256 _src = _mm256_load_ps(dPdP1R + i);
-			__m256 _dst = _mm256_load_ps(dst->L0_a + 65536 + s * SIZE_F1 + i);
+			__m256 _dst = _mm256_load_ps(dst->L0_a + addr + i);
 
 			_src = _mm256_mul_ps(_coeff256, _src);
 			_dst = _mm256_add_ps(_dst, _src);
-			_mm256_store_ps(dst->L0_a + 65536 + s * SIZE_F1 + i, _dst);
-			//dst->L0_a[65536 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
-		}
-		}
-		else if (p1 == ~color_to_piece(board->get_side())) {
-		for (int i = 0; i < 32; i += 8) {
-			__m256 _src = _mm256_load_ps(dPdP1R + i);
-			__m256 _dst = _mm256_load_ps(dst->L0_a + 67584 + s * SIZE_F1 + i);
-
-			_src = _mm256_mul_ps(_coeff256, _src);
-			_dst = _mm256_add_ps(_dst, _src);
-			_mm256_store_ps(dst->L0_a + 67584 + s * SIZE_F1 + i, _dst);
-			//dst->L0_a[67584 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
-		}
-		}
-
-		if (get_file(s) != 7) {
-			p2 = board->get_piece(s + 1);
-			pair = _get_pair(p1, p2, board->get_side());
-			if (pair > -1) {
-			for (int i = 0; i < 32; i += 8) {
-			__m256 _src = _mm256_load_ps(dPdP1R + i);
-			__m256 _dst = _mm256_load_ps(dst->L0_a + 8192 * pair + s * SIZE_F1 + i);
-
-			_src = _mm256_mul_ps(_coeff256, _src);
-			_dst = _mm256_add_ps(_dst, _src);
-			_mm256_store_ps(dst->L0_a + 8192 * pair + s * SIZE_F1 + i, _dst);
-			//dst->L0_a[8192 * pair + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
-			}
-			}
-		}
-		if (get_rank(s) != 7) {
-		if (get_file(s) != 0) {
-			p2 = board->get_piece(s + 7);
-			pair = _get_pair(p1, p2, board->get_side());
-			if (pair > -1) {
-			for (int i = 0; i < 32; i += 8) {
-			__m256 _src = _mm256_load_ps(dPdP1R + i);
-			__m256 _dst = _mm256_load_ps(dst->L0_a + 8192 * pair + 2048 * 1 + s * SIZE_F1 + i);
-
-			_src = _mm256_mul_ps(_coeff256, _src);
-			_dst = _mm256_add_ps(_dst, _src);
-			_mm256_store_ps(dst->L0_a + 8192 * pair + 2048 * 1 + s * SIZE_F1 + i, _dst);
-			//dst->L0_a[8192 * pair + 2048 * 1 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
-			}
-			}
-		}
-			p2 = board->get_piece(s + 8);
-			pair = _get_pair(p1, p2, board->get_side());
-			if (pair > -1) {
-			for (int i = 0; i < 32; i += 8) {
-			__m256 _src = _mm256_load_ps(dPdP1R + i);
-			__m256 _dst = _mm256_load_ps(dst->L0_a + 8192 * pair + 2048 * 2 + s * SIZE_F1 + i);
-
-			_src = _mm256_mul_ps(_coeff256, _src);
-			_dst = _mm256_add_ps(_dst, _src);
-			_mm256_store_ps(dst->L0_a + 8192 * pair + 2048 * 2 + s * SIZE_F1 + i, _dst);
-			//dst->L0_a[8192 * pair + 2048 * 2 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
-			}
-			}
-		if (get_file(s) != 7) {
-			p2 = board->get_piece(s + 9);
-			pair = _get_pair(p1, p2, board->get_side());
-			if (pair > -1) {
-			for (int i = 0; i < 32; i += 8) {
-			__m256 _src = _mm256_load_ps(dPdP1R + i);
-			__m256 _dst = _mm256_load_ps(dst->L0_a + 8192 * pair + 2048 * 3 + s * SIZE_F1 + i);
-
-			_src = _mm256_mul_ps(_coeff256, _src);
-			_dst = _mm256_add_ps(_dst, _src);
-			_mm256_store_ps(dst->L0_a + 8192 * pair + 2048 * 3 + s * SIZE_F1 + i, _dst);
-			//dst->L0_a[8192 * pair + 2048 * 3 + s * SIZE_F1 + i] += _coeff * dPdP1R[i];
-			}
-			}
-		}
+			_mm256_store_ps(dst->L0_a + addr + i, _dst);
 		}
 	}
-
 }
 
 int _solve_learning(Position* board, int depth)
@@ -495,7 +422,7 @@ void _do_learning_thread(Net_train* src,
 			(*games)++;
 		}
 
-		add_double(src, &dst_);
+		add_float(src, &dst_);
 	}
 
 }
@@ -505,7 +432,7 @@ void do_learning(Net* dst, Net* src, int64_t games, int threads, int find_depth,
 	PRNG rng_0(3245356235923498ULL);
 
 	Net_train curr;
-	convert_to_double(&curr, src);
+	convert_to_float(&curr, src);
 
 	atomic<double> loss[64];
 	atomic<uint64_t> games_(0);

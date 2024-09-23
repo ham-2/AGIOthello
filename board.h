@@ -31,42 +31,6 @@ inline int get_file(Square s) { return s & 7; }
 inline int get_rank(Square s) { return s >> 3; }
 inline int get_ldiag(Square s) { return get_file(s) + get_rank(s); }
 inline int get_rdiag(Square s) { return get_file(s) - get_rank(s) + 7; }
-constexpr uint8_t idx_ldiag[64] = {
-	0, 0, 0, 0, 0, 0, 0, 0,
-	1, 1, 1, 1, 1, 1, 1, 0,
-	2, 2, 2, 2, 2, 2, 1, 0,
-	3, 3, 3, 3, 3, 2, 1, 0,
-	4, 4, 4, 4, 3, 2, 1, 0,
-	5, 5, 5, 4, 3, 2, 1, 0,
-	6, 6, 5, 4, 3, 2, 1, 0,
-	7, 6, 5, 4, 3, 2, 1, 0
-};
-constexpr uint8_t idx_rdiag[64] = {
-	0, 0, 0, 0, 0, 0, 0, 0,
-	0, 1, 1, 1, 1, 1, 1, 1,
-	0, 1, 2, 2, 2, 2, 2, 2,
-	0, 1, 2, 3, 3, 3, 3, 3,
-	0, 1, 2, 3, 4, 4, 4, 4,
-	0, 1, 2, 3, 4, 5, 5, 5,
-	0, 1, 2, 3, 4, 5, 6, 6,
-	0, 1, 2, 3, 4, 5, 6, 7
-};
-inline int get_ldiag_idx(Square s) { 
-	return idx_ldiag[s];
-}
-inline int get_rdiag_idx(Square s) {
-	return idx_rdiag[s];
-}
-
-inline Square swap_fr(Square s) { // file <-> rank
-	return Square(((s >> 3) | (s << 3)) & 63);
-}
-inline Square swap_lr(Square s) { // ldiag -> rank
-	return Square(0);
-}
-inline Square swap_rr(Square s) { // rdiag -> rank
-	return Square(0);
-}
 
 typedef uint64_t Bitboard;
 constexpr Bitboard EmptyBoard = 0;

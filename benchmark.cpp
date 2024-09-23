@@ -149,7 +149,7 @@ void net_speedtest() {
 	zero_weights(n);
 	rand_weights(n, 2);
 
-	int16_t P1[64] = { };
+	int16_t P1[SIZE_F1 * 2] = { };
 	int64_t r = 0;
 
 	cout << "Update test: 64M calls\n";
@@ -161,16 +161,17 @@ void net_speedtest() {
 	Bitboard pieces[3] = {};
 	Piece sq[64] = { };
 	pieces[EMPTY] = FullBoard;
+
 	for (int j = 0; j < 1000000; j++) {
-		for (int i = 0; i < 64; i++) {
+		for (Square s = A1; s < SQ_END; ++s) {
 			Piece p = Piece(rng.get() & 3);
 			if (p == MISC) { p = EMPTY; }
 
-			update_L0(P1, Square(i), sq, p, n);
+			update_L0(P1, s, sq[s], p, n);
 
-			pieces[sq[i]] ^= SquareBoard[i];
-			pieces[p] ^= SquareBoard[i];
-			sq[i] = p;
+			pieces[sq[s]] ^= SquareBoard[s];
+			pieces[p]     ^= SquareBoard[s];
+			sq[s] = p;
 		}
 	}
 
@@ -186,7 +187,7 @@ void net_speedtest() {
 	time_start = system_clock::now();
 
 	for (int i = 0; i < 10000000; i++) {
-		for (int j = 0; j < 32; j++) {
+		for (int j = 0; j < SIZE_F1; j++) {
 			uint64_t r = rng.get();
 			P1[j++] = int16_t((r >> 0) & 127);
 			P1[j++] = int16_t((r >> 8) & 127);
@@ -207,7 +208,7 @@ void net_speedtest() {
 void net_verify() {
 	Net* n = new Net;
 	zero_weights(n);
-	rand_weights(n, 7);
+	rand_weights(n, 6);
 
 	verify_SIMD(n);
 }

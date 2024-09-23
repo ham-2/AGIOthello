@@ -128,11 +128,6 @@ int main() {
 			Threads.set_weights();
 		}
 
-		else if (word == "setmat") {
-			set_weights(Threads.n);
-			Threads.set_weights();
-		}
-
 		else if (word == "tune") {
 			ss >> word;
 			int threads = stoi(word);
@@ -202,16 +197,13 @@ int main() {
 			net_speedtest();
 		}
 
-		else if (word == "compute") {
-			int16_t acct[32] = { };
-			for (int i = 0; i < 32; i++) {
-				ss >> acct[i];
-			}
-			cout << compute(acct, Threads.n, BLACK) << endl;
-		}
-
 		else if (word == "gen") {
 			Threads.gen();
+		}
+
+		else if (word == "setmat") {
+			set_material(Threads.n);
+			Threads.set_weights();
 		}
 
 	}

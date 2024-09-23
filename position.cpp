@@ -37,16 +37,16 @@ inline constexpr Bitboard add_captures(Square s, Bitboard us, Bitboard them)
 	Bitboard cand = SquareBoard[s];
 	if (T > 0) {
 		cand |= them & (cand << T);
-		them &= (them << T);
+		them &=        (them << T);
 		cand |= them & (cand << (2 * T));
-		them &= (them << (2 * T));
+		them &=        (them << (2 * T));
 		cand |= them & (cand << (4 * T));
 	}
 	else {
 		cand |= them & (cand >> -T);
-		them &= (them >> -T);
+		them &=        (them >> -T);
 		cand |= them & (cand >> (2 * -T));
-		them &= (them >> (2 * -T));
+		them &=        (them >> (2 * -T));
 		cand |= them & (cand >> (4 * -T));
 	}
 	cand ^= SquareBoard[s];
@@ -229,7 +229,7 @@ void Position::set(string fen) {
 
 	// write other data
 	undo_stack->captured = EmptyBoard;
-	compute_L0(undo_stack->accumulator, squares, pieces, net);
+	compute_L0(undo_stack->accumulator, squares, net);
 
 	rebuild();
 }
@@ -254,7 +254,7 @@ void Position::do_move(Square s, Undo* new_undo) {
 	while (captures) {
 		Square c = pop_lsb(&captures);
 		
-		//update_L0(new_undo->accumulator, c, squares, p, net);
+		update_L0(new_undo->accumulator, c, ~p, p, net);
 
 		squares[c] = p;
 
@@ -265,7 +265,7 @@ void Position::do_move(Square s, Undo* new_undo) {
 	}
 
 	// Place the new piece
-	//update_L0(new_undo->accumulator, s, squares, p, net);
+	update_L0(new_undo->accumulator, s, EMPTY, p, net);
 
 	place(p, s);
 	new_undo->key ^= piece_keys[p][s];
