@@ -386,7 +386,8 @@ void _do_learning_thread(Net_train* src,
 	Net_train dst_;
 	board->set_net(&tmp);
 
-	double loss_total, loss_curr;
+	double loss_total, loss_curr, loss_base;
+	atomic<double>* loss_base_dst = loss + 32;
 
 	while (!(*stop)) {
 		convert_to_int(&tmp, src);
@@ -416,13 +417,23 @@ void _do_learning_thread(Net_train* src,
 				score_true < 0 ? EVAL_NONE : 0;
 
 			loss_total = 0;
+			loss_base = 0;
 			// skip last null move
-			if (depth > depth_begin) { board->undo_move(); }
+			if (depth > depth_begin) { 
+				score_true = -score_true;
+				board->undo_move();
+			}
+
 			while (true) {
 				backpropagate(&dst_, board,
 					score_true, &loss_curr, lr);
 
 				loss_total += loss_curr;
+
+				int score_base = get_material(*board);
+				score_base = score_base > 0 ? EVAL_ALL :
+					score_base < 0 ? EVAL_NONE : 0;
+				loss_base += double(score_true - score_base) * (score_true - score_base);
 
 				score_true = -score_true;
 				depth--;
@@ -430,8 +441,11 @@ void _do_learning_thread(Net_train* src,
 				else { break; }
 			}
 			loss_total /= (depth_end - depth_begin + 1);
+			loss_base  /= (depth_end - depth_begin + 1);
 
 			*loss = loss_total + (*loss) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
+			*loss_base_dst = loss_base + (*loss_base_dst) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
+			
 			(*games)++;
 		}
 
@@ -452,7 +466,7 @@ void do_learning(Net* dst, Net* src, uint64_t games, int threads, int find_depth
 	thread thread_[64];
 	Position* boards[64];
 
-	double loss_;
+	double loss_, loss_base_;
 
 	using namespace std::chrono;
 
@@ -485,10 +499,13 @@ void do_learning(Net* dst, Net* src, uint64_t games, int threads, int find_depth
 	while (!(Threads.stop) && (games_ < games)) {
 		std::this_thread::sleep_for(milliseconds(3000));
 		loss_ = 0.0;
+		loss_base_ = 0.0;
 		for (int i = 0; i < threads; i++) {
 			loss_ += loss[i];
+			loss_base_ += loss[i + 32];
 		}
 		loss_ /= threads;
+		loss_base_ /= threads;
 
 		system_clock::time_point time_now = system_clock::now();
 		time = duration_cast<milliseconds>(time_now - time_start);
@@ -497,6 +514,7 @@ void do_learning(Net* dst, Net* src, uint64_t games, int threads, int find_depth
 			<< "Time: " << std::setw(7) << time.count() / 1000 << "s // "
 			<< "Games: " << std::setw(7) << std::fixed << float(games_ / 1000) / 1000 << "M // "
 			<< "Acc: " << std::setw(5) << 100 - sqrt(loss_ / LOSS_SMOOTH) * 50 / EVAL_ALL << "% // "
+			<< "Acc_Baseline: " << std::setw(5) << 100 - sqrt(loss_base_ / LOSS_SMOOTH) * 50 / EVAL_ALL << "% // "
 			<< "Loss: " << std::scientific << loss_
 			<< std::endl;
 	}
