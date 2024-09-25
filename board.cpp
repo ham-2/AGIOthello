@@ -5,7 +5,13 @@ using namespace std;
 Bitboard SquareBoard[64];
 Bitboard LDiagBoard[15];
 Bitboard RDiagBoard[15];
+#ifdef _BMI2_
+#ifdef _BIGC_
 uint8_t Captures[65536];
+#else
+uint8_t Captures[8][256];
+#endif
+#endif
 
 Square parse_square(char file, char rank) {
 	if (file == '0') { return NULL_MOVE; }
@@ -57,6 +63,7 @@ namespace Board {
 
 #ifdef _BMI2_
 		// Capture Table
+#ifdef _BIGC_
 		// Index: 16 bits
 		// = 8 bits (occupied)
 		// + 8 bits (us / them if occupied, empty / move if empty)
@@ -118,6 +125,35 @@ namespace Board {
 			}
 			}
 		}
+#else
+		for (int c = 0; c < 8; c++) {
+			for (int bits = 0; bits < 256; bits++) {
+				uint8_t along;
+
+				uint8_t cand_l = 1 << c;
+				along = ~bits;
+				cand_l |= along & (cand_l << 1);
+				along  &= along << 1;
+				cand_l |= along & (cand_l << 2);
+				along  &= along << 2;
+				cand_l |= along & (cand_l << 4);
+				cand_l ^= 1 << c;
+				cand_l = (cand_l << 1) & bits ? cand_l : 0;
+
+				uint8_t cand_r = 1 << c;
+				along = ~bits;
+				cand_r |= along & (cand_r >> 1);
+				along  &= along >> 1;
+				cand_r |= along & (cand_r >> 2);
+				along  &= along >> 2;
+				cand_r |= along & (cand_r >> 4);
+				cand_r ^= 1 << c;
+				cand_r = (cand_r >> 1) & bits ? cand_r : 0;
+
+				Captures[c][bits] = cand_l | cand_r;
+			}
+		}
+#endif
 #endif
 
 #ifdef _POPCNT_HELPER_

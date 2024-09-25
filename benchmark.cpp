@@ -1,5 +1,3 @@
-#include <cstdint>
-
 #include "benchmark.h"
 
 using namespace std;

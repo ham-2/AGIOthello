@@ -30,7 +30,11 @@ constexpr int SIZE_F3 = 32;
 
 constexpr int SHIFT_L0 = 4;
 constexpr int SHIFT_L1 = 8;
-constexpr int SHIFT_L2 = 4;
+constexpr int SHIFT_L2 = 0;
+
+constexpr int MAX_L1 = 127;
+constexpr int MAX_L2 = 127;
+constexpr int MAX_L3 = 1023;
 
 constexpr int L0_OFFSET = SIZE_F1 * SQ_END;
 

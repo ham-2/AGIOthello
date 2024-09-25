@@ -72,8 +72,8 @@ void add_float(Net_train* dst, Net_train* src) {
 		__m256 dst_ = _mm256_load_ps(dst->L0_a + i);
 		__m256 src_ = _mm256_load_ps(src->L0_a + i);
 		dst_ = _mm256_add_ps(dst_, src_);
-		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-127.0f));
-		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(127.0f));
+		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-16383.0f));
+		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(16383.0f));
 		_mm256_store_ps(dst->L0_a + i, dst_);
 	}
 	for (int i = 0; i < SIZE_F1; i += 8) {
@@ -153,15 +153,18 @@ void backpropagate(Net_train* dst, Position* board,
 	int16_t *acc = board->get_accumulator() + (board->get_side() ? SIZE_F1 : 0);
 	Net* n = board->get_net();
 
-	ReLUClip<SIZE_F1, SHIFT_L0, 127>(P1, acc);
+	ReLUClip<SIZE_F1, SHIFT_L0, MAX_L1>(P1, acc);
 	compute_layer<SIZE_F2, SIZE_F1>(P2_RAW, P1, n->L1_a, n->L1_b);
-	ReLUClip<SIZE_F2, SHIFT_L1, 127>(P2, P2_RAW);
+	ReLUClip<SIZE_F2, SHIFT_L1, MAX_L2>(P2, P2_RAW);
 	compute_layer<SIZE_F3, SIZE_F2>(P3_RAW, P2, n->L2_a, n->L2_b);
-	ReLUClip<SIZE_F3, SHIFT_L2, 2047>(P3, P3_RAW);
+	ReLUClip<SIZE_F3, SHIFT_L2, MAX_L3>(P3, P3_RAW);
 	compute_L3(&P, P3, n);
 
 	// -dE/dP = true - curr
 	float _coeff = learning_rate * (score_true - P);
+
+	// clip: only for loss
+	P = P > EVAL_ALL ? EVAL_ALL : P < EVAL_NONE ? EVAL_NONE : P;
 	*loss = 1.0 * (score_true - P) * (score_true - P);
 
 	dst->L3_b += _coeff;
@@ -180,7 +183,7 @@ void backpropagate(Net_train* dst, Position* board,
 	}
 
 	for (int i = 0; i < SIZE_F3; i ++) {
-		dPdP3R[i] = P3_RAW[i] > (1023 << SHIFT_L2) ? 0.0 :
+		dPdP3R[i] = P3_RAW[i] > (MAX_L3 << SHIFT_L2) ? 0.0 :
 			P3_RAW[i] < 0 ? 0.0 : 1.0;
 
 		dPdP3R[i] *= n->L3_a[i] / (1 << SHIFT_L2);
@@ -195,7 +198,7 @@ void backpropagate(Net_train* dst, Position* board,
 	}
 
 	for (int i = 0; i < SIZE_F2; i++) {
-		double dP2dP2R = P2_RAW[i] > (127 << SHIFT_L1) ? 0.0 :
+		double dP2dP2R = P2_RAW[i] > (MAX_L2 << SHIFT_L1) ? 0.0 :
 			P2_RAW[i] < 0 ? 0.0 : 1.0;
 
 		dPdP2R[i] = 0;
@@ -214,7 +217,7 @@ void backpropagate(Net_train* dst, Position* board,
 	}
 
 	for (int i = 0; i < SIZE_F1; i++) {
-		double dP1dP1R = acc[i] > (127 << SHIFT_L0) ? 0.0 :
+		double dP1dP1R = acc[i] > (MAX_L1 << SHIFT_L0) ? 0.0 :
 			acc[i] < 0 ? 0.0 : 1.0;
 
 		dPdP1R[i] = 0;
@@ -245,7 +248,7 @@ void backpropagate(Net_train* dst, Position* board,
 	}
 }
 
-int _solve_learning(Position* board, int depth)
+int _solve_learning(Position* board)
 {
 
 	MoveList legal_moves;
@@ -254,13 +257,15 @@ int _solve_learning(Position* board, int depth)
 	if (legal_moves.list == legal_moves.end) {
 
 		if (board->get_passed()) {
-			return get_material(*board);
+			int bc = popcount(board->get_pieces(BLACK_P));
+			int wc = popcount(board->get_pieces(WHITE_P));
+			return board->get_side() ? wc - bc : bc - wc;
 		}
 
 		else {
 			Undo u;
 			board->do_null_move(&u);
-			int after_pass = -_solve_learning(board, depth - 1);
+			int after_pass = -_solve_learning(board);
 			board->undo_null_move();
 			return after_pass;
 		}
@@ -268,8 +273,6 @@ int _solve_learning(Position* board, int depth)
 
 	// Legal moves
 	else {
-		if (depth < 1) { return eval(*board); }
-
 		Square s;
 		int new_eval = EVAL_INIT;
 
@@ -280,7 +283,7 @@ int _solve_learning(Position* board, int depth)
 			Undo u;
 			board->do_move(s, &u);
 
-			int comp_eval = -_solve_learning(board, depth - 1);
+			int comp_eval = -_solve_learning(board);
 
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
@@ -304,14 +307,18 @@ int _play_rand(Position* board, PRNG* rng_)
 		}
 
 		else {
-			board->do_null_fast();
+			Undo* u = new Undo;
+			board->do_null_fast(u);
+			u->del = true;
 			return 1;
 		}
 	}
 
 	else {
 		Square s = legal_moves.list[rng.get() % legal_moves.length()];
-		board->do_move_fast(s);
+		Undo* u = new Undo;
+		board->do_move_fast(s, u);
+		u->del = true;
 		return 1;
 	}
 }
@@ -331,7 +338,6 @@ int _play_best(Position* board, int find_depth)
 			Undo* u = new Undo;
 			board->do_null_move(u);
 			u->del = true;
-
 			return 1;
 		}
 	}
@@ -351,7 +357,7 @@ int _play_best(Position* board, int find_depth)
 			Undo u;
 			board->do_move(s, &u);
 
-			comp_eval = -_solve_learning(board, 60);
+			comp_eval = -_solve_learning(board);
 
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
@@ -390,31 +396,38 @@ void _do_learning_thread(Net_train* src,
 			board->set(startpos_fen_);
 			int depth = 0;
 
-			while (board->get_count(EMPTY) > find_depth &&
+			while ((depth < 60 - find_depth) &&
 				_play_rand(board, &p) > 0) {
 				depth++;
 			}
+			board->set_squares();
 			board->set_accumulator();
 			int depth_begin = depth;
 
-			while (board->get_count(EMPTY) > 0 &&
-				_play_best(board, find_depth) > 0) {
+			while (_play_best(board, find_depth) > 0) {
 				depth++;
 			}
 			int depth_end = depth;
 
-			int score_true = _solve_learning(board, 60);
+			int score_true = _solve_learning(board);
+
+			// WDL training
+			score_true = score_true > 0 ? EVAL_ALL :
+				score_true < 0 ? EVAL_NONE : 0;
 
 			loss_total = 0;
-			while (depth >= depth_begin) {
+			// skip last null move
+			if (depth > depth_begin) { board->undo_move(); }
+			while (true) {
 				backpropagate(&dst_, board,
 					score_true, &loss_curr, lr);
 
 				loss_total += loss_curr;
 
-				if (depth > depth_begin) { board->undo_move(); }
 				score_true = -score_true;
 				depth--;
+				if (depth > depth_begin) { board->undo_move(); }
+				else { break; }
 			}
 			loss_total /= (depth_end - depth_begin + 1);
 
@@ -427,7 +440,7 @@ void _do_learning_thread(Net_train* src,
 
 }
 
-void do_learning(Net* dst, Net* src, int64_t games, int threads, int find_depth, double lr) {
+void do_learning(Net* dst, Net* src, uint64_t games, int threads, int find_depth, double lr) {
 
 	PRNG rng_0(3245356235923498ULL);
 
@@ -459,15 +472,18 @@ void do_learning(Net* dst, Net* src, int64_t games, int threads, int find_depth,
 		);
 	}
 
-	std::cout << std::scientific;
+	std::cout << std::setprecision(1);
 
 	std::cout
-		<< "Tuning with: " << threads << " Threads\n"
-		<< "Learning rate: " << std::setw(12) << lr << '\n'
+		<< "Learning with: " << threads << " Threads\n"
+		<< "Learning rate: " << std::scientific << lr << '\n'
 		<< "Max Games: " << games << '\n' 
 		<< "Depth: " << find_depth << '\n' << std::endl;
 
-	while (!(Threads.stop) && (games == -1 || (games_ < games))) {
+	std::cout << std::setprecision(2);
+
+	while (!(Threads.stop) && (games_ < games)) {
+		std::this_thread::sleep_for(milliseconds(3000));
 		loss_ = 0.0;
 		for (int i = 0; i < threads; i++) {
 			loss_ += loss[i];
@@ -478,13 +494,11 @@ void do_learning(Net* dst, Net* src, int64_t games, int threads, int find_depth,
 		time = duration_cast<milliseconds>(time_now - time_start);
 
 		std::cout
-			<< "Elapsed Time: " << std::setw(12) << time.count() << "ms // "
-			<< "Games: " << std::setw(12) << games_ << " // "
-			<< "Loss: " << loss_ 
-			<< " (" << int(sqrt(loss_ / LOSS_SMOOTH) * 100 / (1 << (EVAL_BITS - 6))) << " RMS cd)"
+			<< "Time: " << std::setw(7) << time.count() / 1000 << "s // "
+			<< "Games: " << std::setw(7) << std::fixed << float(games_ / 1000) / 1000 << "M // "
+			<< "Acc: " << std::setw(5) << 100 - sqrt(loss_ / LOSS_SMOOTH) * 50 / EVAL_ALL << "% // "
+			<< "Loss: " << std::scientific << loss_
 			<< std::endl;
-
-		std::this_thread::sleep_for(milliseconds(3000));
 	}
 
 	for (int i = 0; i < threads; i++) {

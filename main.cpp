@@ -102,7 +102,7 @@ int main() {
 			set_option(ss);
 		}
 
-		// Commands related to weight
+		// Weight
 
 		else if (word == "load") {
 			Threads.acquire_lock();

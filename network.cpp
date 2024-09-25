@@ -288,11 +288,11 @@ int compute(int16_t* src, Net* n, Color side_to_move) {
 	int16_t P3[SIZE_F3];
 	int64_t P4;
 	
-	ReLUClip<SIZE_F1, SHIFT_L0, 127>(P1, src + (side_to_move ? SIZE_F1 : 0));
+	ReLUClip<SIZE_F1, SHIFT_L0, MAX_L1>(P1, src + (side_to_move ? SIZE_F1 : 0));
 	compute_layer<SIZE_F2, SIZE_F1>(P2, P1, n->L1_a, n->L1_b);
-	ReLUClip<SIZE_F2, SHIFT_L1, 127>(P2, P2);
+	ReLUClip<SIZE_F2, SHIFT_L1, MAX_L2>(P2, P2);
 	compute_layer<SIZE_F3, SIZE_F2>(P3, P2, n->L2_a, n->L2_b);
-	ReLUClip<SIZE_F3, SHIFT_L2, 2047>(P3, P3);
+	ReLUClip<SIZE_F3, SHIFT_L2, MAX_L3>(P3, P3);
 	compute_L3(&P4, P3, n);
 
 	return int(P4);
@@ -341,7 +341,7 @@ void verify_SIMD(Net* n) {
 
 	std::cout << "update_L0 error: " << p1_err << std::endl;
 
-	ReLUClip<SIZE_F1, SHIFT_L0, 127>(P1, P1_ACC);
+	ReLUClip<SIZE_F1, SHIFT_L0, MAX_L1>(P1, P1_ACC);
 	compute_layer<SIZE_F2, SIZE_F1>(P2, P1, n->L1_a, n->L1_b);
 	compute_layer_fallback<SIZE_F2, SIZE_F1>(P2_F, P1, n->L1_a, n->L1_b);
 
@@ -355,14 +355,14 @@ void verify_SIMD(Net* n) {
 
 	std::cout << "compute_Layer error: " << p2_err << std::endl;
 
-	ReLUClip<SIZE_F2, SHIFT_L1, 127>(P2, P2);
+	ReLUClip<SIZE_F2, SHIFT_L1, MAX_L2>(P2, P2);
 	compute_layer<SIZE_F3, SIZE_F2>(P3, P2, n->L2_a, n->L2_b);
-	ReLUClip<SIZE_F3, SHIFT_L2, 2047>(P3, P3);
+	ReLUClip<SIZE_F3, SHIFT_L2, MAX_L3>(P3, P3);
 	compute_L3(&P, P3, n);
 
-	ReLUClip_fallback<SIZE_F2, SHIFT_L1, 127>(P2_F, P2_F);
+	ReLUClip_fallback<SIZE_F2, SHIFT_L1, MAX_L2>(P2_F, P2_F);
 	compute_layer_fallback<SIZE_F3, SIZE_F2>(P3_F, P2_F, n->L2_a, n->L2_b);
-	ReLUClip_fallback<SIZE_F3, SHIFT_L2, 2047>(P3_F, P3_F);
+	ReLUClip_fallback<SIZE_F3, SHIFT_L2, MAX_L3>(P3_F, P3_F);
 	compute_L3(&P_F, P3_F, n);
 
 	int p3_err = 0;

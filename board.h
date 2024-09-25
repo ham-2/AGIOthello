@@ -32,6 +32,10 @@ inline int get_rank(Square s) { return s >> 3; }
 inline int get_ldiag(Square s) { return get_file(s) + get_rank(s); }
 inline int get_rdiag(Square s) { return get_file(s) - get_rank(s) + 7; }
 
+inline int min_diag(int a, int b) { return a > b ? b : a; }
+inline int get_lidx(Square s) { return min_diag(get_rank(s), 7 - get_file(s)); }
+inline int get_ridx(Square s) { return min_diag(get_rank(s), get_file(s)); }
+
 typedef uint64_t Bitboard;
 constexpr Bitboard EmptyBoard = 0;
 constexpr Bitboard FullBoard  = ~EmptyBoard;
@@ -63,7 +67,14 @@ constexpr uint16_t Masks[8] = {
 	~257, ~(257 << 1), ~(257 << 2), ~(257 << 3),
 	~(257 << 4), ~(257 << 5), ~(257 << 6), ~(257 << 7)
 };
+
+#ifdef _BMI2_
+#ifdef _BIGC_
 extern uint8_t Captures[65536];
+#else
+extern uint8_t Captures[8][256];
+#endif
+#endif
 
 inline Bitboard get_fileboard(Square s) { return FileBoard[get_file(s)]; }
 inline Bitboard get_rankboard(Square s) { return RankBoard[get_rank(s)]; }

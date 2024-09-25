@@ -55,12 +55,13 @@ inline constexpr Bitboard add_captures(Square s, Bitboard us, Bitboard them)
 
 Bitboard Position::index_captures(Square s, Piece p) {
 #ifdef _BMI2_
-	// Assumes the square is empty
 	int file = get_file(s);
 	int rank = get_rank(s);
 	int ldiag = get_ldiag(s);
 	int rdiag = get_rdiag(s);
 
+#ifdef _BIGC_
+	// Assumes the square is empty
 	Bitboard upper = ~pieces[EMPTY]; // occupied bits
 	Bitboard lower = pieces[~p] | SquareBoard[s]; // them bits + set(misc)
 
@@ -79,8 +80,42 @@ Bitboard Position::index_captures(Square s, Piece p) {
 	uint8_t ldiag_c = Captures[ld_idx];
 	uint8_t rdiag_c = Captures[rd_idx];
 
-	return to_file(file_c, file) | to_rank(rank_c, rank) |
-		to_ldiag(ldiag_c, ldiag) | to_rdiag(rdiag_c, rdiag);
+	return to_file(file_c, file) | to_rank(rank_c, rank)
+	| to_ldiag(ldiag_c, ldiag) | to_rdiag(rdiag_c, rdiag);
+
+#else
+
+	Bitboard captures = EmptyBoard;
+	Bitboard ue = ~pieces[~p];
+	Bitboard us = pieces[p];
+	int lidx = get_lidx(s);
+	int ridx = get_ridx(s);
+
+	uint8_t a, b, c;
+
+	a = Captures[rank][extract_bits(ue, FileBoard[file])];
+	b = Captures[rank][extract_bits(us, FileBoard[file])];
+	c = (a & b) ^ Captures[rank][a ^ b];
+	captures |= to_file(c, file);
+
+	a = Captures[file][extract_bits(ue, RankBoard[rank])];
+	b = Captures[file][extract_bits(us, RankBoard[rank])];
+	c = (a & b) ^ Captures[file][a ^ b];
+	captures |= to_rank(c, rank);
+
+	a = Captures[lidx][extract_bits(ue, LDiagBoard[ldiag])];
+	b = Captures[lidx][extract_bits(us, LDiagBoard[ldiag])];
+	c = (a & b) ^ Captures[lidx][a ^ b];
+	captures |= to_ldiag(c, ldiag);
+
+	a = Captures[ridx][extract_bits(ue, RDiagBoard[rdiag])];
+	b = Captures[ridx][extract_bits(us, RDiagBoard[rdiag])];
+	c = (a & b) ^ Captures[ridx][a ^ b];
+	captures |= to_rdiag(c, rdiag);
+	
+	return captures;
+#endif
+
 #else
 	Bitboard captures = EmptyBoard;
 
@@ -162,6 +197,26 @@ void Position::verify() {
 	}
 
 	cout << *this << "\n\n" << testpos << endl;
+}
+
+void Position::set_squares() {
+	Bitboard e = pieces[EMPTY];
+	Bitboard b = pieces[BLACK_P];
+
+	int sqc[3] = { };
+	for (Square s = A1; s < SQ_END; ++s) {
+		squares[s] = e & 1 ? EMPTY :
+			b & 1 ? BLACK_P : WHITE_P;
+
+		e >>= 1;
+		b >>= 1;
+		sqc[squares[s]]++;
+	}
+
+	piece_count[EMPTY] = popcount(pieces[EMPTY]);
+	piece_count[BLACK_P] = popcount(pieces[BLACK_P]);
+	piece_count[WHITE_P] = popcount(pieces[WHITE_P]);
+	for (int i = 0; i < 3; i++) { if (sqc[i] != piece_count[i]) { throw; } }
 }
 
 void Position::show() {
@@ -322,31 +377,52 @@ void Position::do_move_wrap(Square s, Undo* new_undo) {
 	else { do_move(s, new_undo); }
 }
 
-void Position::do_move_fast(Square s) {
-	undo_stack->pass = false;
+void Position::do_move_fast(Square s, Undo* new_undo) {
+	memcpy(new_undo, undo_stack, sizeof(Undo));
+	new_undo->s = s;
+	new_undo->prev = undo_stack;
+	new_undo->pass = false;
+	new_undo->del = false;
+
+	undo_stack = new_undo;
 
 	Piece p = side_to_move ? WHITE_P : BLACK_P;
 	Bitboard captures = index_captures(s, p);
-	
+
 	pieces[~p] ^= captures;
 	pieces[p] ^= captures;
 
-	while (captures) {
-		Square c = pop_lsb(&captures);
+	new_undo->captured = captures;
 
-		squares[c] = p;
-
-		piece_count[p]++;
-		piece_count[~p]--;
-	}
-
-	place(p, s);
+	pieces[p] ^= SquareBoard[s];
+	pieces[EMPTY] ^= SquareBoard[s];
 	side_to_move = ~side_to_move;
 }
 
-void Position::do_null_fast() {
-	undo_stack->pass = true;
+void Position::do_null_fast(Undo* new_undo) {
+	memcpy(new_undo, undo_stack, sizeof(Undo));
+	new_undo->s = NULL_MOVE;
+	new_undo->prev = undo_stack;
+	new_undo->pass = true;
+	new_undo->del = false;
+
+	undo_stack = new_undo;
+}
+
+void Position::undo_move_fast() {
+	Square s = undo_stack->s;
+	if (s == NULL_MOVE) { undo_null_move(); return; }
+
+	Piece p = side_to_move ? WHITE_P : BLACK_P;
+	Bitboard captured = undo_stack->captured;
+
+	pieces[~p] ^= captured;
+	pieces[p] ^= captured;
+	pieces[~p] ^= SquareBoard[s];
+	pieces[EMPTY] ^= SquareBoard[s];
+
 	side_to_move = ~side_to_move;
+	pop_stack();
 }
 
 Position& Position::operator=(const Position board) {
