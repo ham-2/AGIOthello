@@ -29,6 +29,10 @@ inline int get_material(Position& board) {
 		(board.get_count(WHITE_P) - board.get_count(BLACK_P)) << (EVAL_BITS - 6) :
 		(board.get_count(BLACK_P) - board.get_count(WHITE_P)) << (EVAL_BITS - 6);
 }
+inline int get_material_eval(Position& board) {
+	int m = get_material(board);
+	return m == 0 ? m : m ^ EVAL_END;
+}
 
 string eval_print(int eval);
 

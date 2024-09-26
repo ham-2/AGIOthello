@@ -73,7 +73,7 @@ int _solve() {
 	if (legal_moves.list == legal_moves.end) {
 
 		if (Threads.board->get_passed()) {
-			int score = get_material(*Threads.board) ^ EVAL_END;
+			int score = get_material_eval(*Threads.board);
 			Main_TT.register_entry(root_key, 64, score, GAME_END);
 			return score;
 		}
@@ -148,7 +148,6 @@ void net_speedtest() {
 	rand_weights(n, 2);
 
 	int16_t P1[SIZE_F1 * 2] = { };
-	int64_t r = 0;
 
 	cout << "Update test: 64M calls\n";
 
@@ -180,6 +179,7 @@ void net_speedtest() {
 		<< ", " << double(64000) / time.count() << " MOps" << endl;
 
 	cout << "Evaluate test: 10M calls\n";
+	int v[2];
 
 	// Evaluate
 	time_start = system_clock::now();
@@ -192,7 +192,7 @@ void net_speedtest() {
 			P1[j++] = int16_t((r >> 16) & 127);
 			P1[j]   = int16_t((r >> 24) & 127);
 		}
-		r += compute(P1, n, BLACK);
+		compute(v, P1, n, BLACK);
 	}
 
 	time_now = system_clock::now();
@@ -200,7 +200,7 @@ void net_speedtest() {
 
 	cout << "elapsed time: " << time.count() << "ms"
 		<< ", " << double(10000) / time.count() << " MOps" 
-		<< '\n' << r << endl;
+		<< '\n' << v[0] << ' ' << v[1] << endl;
 }
 
 void net_verify() {
@@ -209,4 +209,155 @@ void net_verify() {
 	rand_weights(n, 6);
 
 	verify_SIMD(n);
+}
+
+int find_best_(Position& board, int depth) {
+	if (depth < 1) { return eval(board); }
+	
+	MoveList legal_moves;
+	legal_moves.generate(board);
+
+	if (legal_moves.list == legal_moves.end) {
+		if (board.get_passed()) { 
+			return get_material_eval(board);
+		}
+
+		else {
+			Undo u;
+			board.do_null_move(&u);
+			int after_pass = -find_best_(board, depth - 1);
+			board.undo_null_move();
+			return after_pass;
+		}
+	}
+	
+	Square s;
+	Square nmove = NULL_MOVE;
+	int comp_eval;
+	int new_eval = EVAL_INIT;
+
+	for (int i = 0; i < legal_moves.length(); i++) {
+		s = legal_moves.list[i];
+
+		// Do move
+		Undo u;
+		board.do_move(s, &u);
+		comp_eval = -find_best_(board, depth - 1);
+		if (comp_eval > new_eval) {
+			new_eval = comp_eval;
+			nmove = s;
+		}
+		board.undo_move();
+	}
+	return new_eval;
+}
+
+int play(Position& board1, Position& board2, int sd) {
+
+	MoveList legal_moves;
+	legal_moves.generate(board1);
+	if (legal_moves.list == legal_moves.end) {
+		if (board1.get_passed()) { return get_material_eval(board1); }
+		Undo u1, u2;
+		board1.do_null_move(&u1);
+		board2.do_null_move(&u2);
+		int r = -play(board2, board1, sd);
+		board1.undo_null_move();
+		board2.undo_null_move();
+		return r;
+	}
+	else {
+		Square s;
+		Square nmove = NULL_MOVE;
+		int comp_eval;
+		int new_eval = EVAL_INIT;
+
+		for (int i = 0; i < legal_moves.length(); i++) {
+			s = legal_moves.list[i];
+			Undo u;
+			board1.do_move(s, &u);
+			comp_eval = -find_best_(board1, sd);
+			if (comp_eval > new_eval) {
+				new_eval = comp_eval;
+				nmove = s;
+			}
+			board1.undo_move();
+		}
+		Undo u1, u2;
+		board1.do_move(nmove, &u1);
+		board2.do_move(nmove, &u2);
+		int r = -play(board2, board1, sd);
+		board1.undo_move();
+		board2.undo_move();
+		return r;
+	}
+}
+
+void net_strengthtest(int games, int depth_start, int depth_search) {
+	Net n;
+	Position board1(Threads.n);
+	Position board2(&n);
+
+	cout << "Randomnet \n";
+	zero_weights(&n);
+	rand_weights(&n, 6);
+	
+	int win  = 0;
+	int draw = 0;
+	int loss = 0;
+
+	for (int i = 0; i < games; i++) {
+		board1.set(startpos_fen);
+		board2.set(startpos_fen);
+
+		for (int j = 0; j < depth_start; j++) {
+			MoveList legal_moves;
+			legal_moves.generate(board1);
+			if (legal_moves.list == legal_moves.end) {
+				if (board1.get_passed()) { break; }
+				Undo* u1 = new Undo;
+				Undo* u2 = new Undo;
+				board1.do_null_fast(u1);
+				board2.do_null_fast(u2);
+				u1->del = true;
+				u2->del = true;
+			}
+			else {
+				Square m = legal_moves.list[rng.get() % legal_moves.length()];
+				Undo* u1 = new Undo;
+				Undo* u2 = new Undo;
+				board1.do_move_fast(m, u1);
+				board2.do_move_fast(m, u2);
+				u1->del = true;
+				u2->del = true;
+			}
+		}
+
+		if (board1.get_passed()) {
+			MoveList legal_moves;
+			legal_moves.generate(board1);
+			if (legal_moves.list == legal_moves.end) {
+				i--;
+				continue;
+			}
+		}
+
+		board1.set_squares();
+		board1.set_accumulator();
+		board2.set_squares();
+		board2.set_accumulator();
+
+		int score1 = play(board1, board2, depth_search - 1);
+		int score2 = play(board2, board1, depth_search - 1);
+		score1 = score1 > 0 ? 1 : score1 < 0 ? -1 : 0;
+		score2 = score2 > 0 ? -1 : score2 < 0 ? 1 : 0;
+		if (score1 + score2 == 0) { draw++; }
+		else if (score1 + score2 > 0) { win++; }
+		else { loss++; }
+	}
+
+	double elo_diff = log10(double(games) / (0.01 + loss + double(draw) / 2) - 1) * 400;
+
+	cout << "+" << win << " =" << draw << " -" << loss << '\n'
+		<< "elo " << int(elo_diff) << endl;
 }

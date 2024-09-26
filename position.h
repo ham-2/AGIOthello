@@ -66,7 +66,7 @@ public:
 	inline int16_t* get_accumulator() { return undo_stack->accumulator; }
 	inline void set_accumulator() { compute_L0(undo_stack->accumulator, squares, net); }
 	inline Net* get_net() { return net; }
-	inline int get_eval() { return compute(undo_stack->accumulator, net, side_to_move); }
+	inline void get_eval(int* dst) { compute(dst, undo_stack->accumulator, net, side_to_move); }
 
 	// functions for tuning
 	inline void set_net(Net* n) { net = n; }

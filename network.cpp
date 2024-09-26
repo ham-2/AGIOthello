@@ -10,14 +10,7 @@ void load_weights(Net* net, std::string filename)
 	std::cout << "Loading weights from \"" << filename << "\"\n";
 	std::ifstream input(filename, std::ios::binary);
 
-	input.read((char*)net->L0_a, SIZE_F0 * SIZE_F1);
-	input.read((char*)net->L0_b, SIZE_F1 * 2);
-	input.read((char*)net->L1_a, SIZE_F1 * SIZE_F2);
-	input.read((char*)net->L1_b, SIZE_F2 * 2);
-	input.read((char*)net->L2_a, SIZE_F2 * SIZE_F3);
-	input.read((char*)net->L2_b, SIZE_F3 * 2);
-	input.read((char*)net->L3_a, SIZE_F3 * 2);
-	input.read((char*)(&net->L3_b), 4);
+	input.read((char*)net, sizeof(Net));
 
 	if (input.fail() || (input.peek() != EOF)) {
 		std::cout << "Failed to load weights" << std::endl;
@@ -37,14 +30,7 @@ void save_weights(Net* net, std::string filename)
 	std::cout << "Saving weights to \"" << filename << "\"\n";
 	std::ofstream output(filename, std::ios::binary);
 	
-	output.write((char*)net->L0_a, SIZE_F0 * SIZE_F1);
-	output.write((char*)net->L0_b, SIZE_F1 * 2);
-	output.write((char*)net->L1_a, SIZE_F1 * SIZE_F2);
-	output.write((char*)net->L1_b, SIZE_F2 * 2);
-	output.write((char*)net->L2_a, SIZE_F2 * SIZE_F3);
-	output.write((char*)net->L2_b, SIZE_F3 * 2);
-	output.write((char*)net->L3_a, SIZE_F3 * 2);
-	output.write((char*)(&net->L3_b), 4);
+	output.write((char*)net, sizeof(Net));
 
 	if (output.fail()) {
 		std::cout << "Failed to save weights" << std::endl;
@@ -80,20 +66,20 @@ void set_material(Net* net) {
 	zero_weights(net);
 	for (int s = A1; s < SQ_END; s++) {
 		for (int i = 0; i < SIZE_F1; i += 2) {
-			net->L0_a[s * SIZE_F1 + i                ] = 1 * (1 << SHIFT_L0);
-			net->L0_a[s * SIZE_F1 + i + 1 + L0_OFFSET] = 1 * (1 << SHIFT_L0);
+			net->L0_a[s * SIZE_F1 + i                ] = 1 * (1 << SHIFT_L1);
+			net->L0_a[s * SIZE_F1 + i + 1 + L0_OFFSET] = 1 * (1 << SHIFT_L1);
 		}
 	}
 	for (int i = 0; i < SIZE_F1; i += 2) {
 		for (int j = 0; j < SIZE_F2; j += 2) {
-			net->L1_a[j + 0 + (i + 0) * 32] = 2 * (1 << SHIFT_L1) / SIZE_F1;
-			net->L1_a[j + 1 + (i + 1) * 32] = 2 * (1 << SHIFT_L1) / SIZE_F1;
+			net->L1_a[j + 0 + (i + 0) * 32] = 2 * (1 << SHIFT_L2) / SIZE_F1;
+			net->L1_a[j + 1 + (i + 1) * 32] = 2 * (1 << SHIFT_L2) / SIZE_F1;
 		}
 	}
 	for (int i = 0; i < SIZE_F2; i += 2) {
 		for (int j = 0; j < SIZE_F3; j += 2) {
-			net->L2_a[j + 0 + (i + 0) * 32] = 2 * (1 << SHIFT_L2);
-			net->L2_a[j + 1 + (i + 1) * 32] = 2 * (1 << SHIFT_L2);
+			net->L2_a[j + 0 + (i + 0) * 32] = 2 * (1 << SHIFT_L3);
+			net->L2_a[j + 1 + (i + 1) * 32] = 2 * (1 << SHIFT_L3);
 		}
 	}
 	// after L2: SIZE_F2 * count each
@@ -273,29 +259,35 @@ void compute_layer(int16_t* dst,
 }
 
 void compute_L3(int64_t* dst, int16_t* src, Net* n) {
-	*dst = n->L3_b;
+	for (int j = 0; j < SIZE_OUT; j++) {
+		dst[j] = n->L3_b[j];
+	}
 	for (int i = 0; i < SIZE_F3; i++) {
-		*dst += int64_t(src[i]) * n->L3_a[i];
+	for (int j = 0; j < SIZE_OUT; j++) {
+		dst[j] += int64_t(src[i]) * n->L3_a[j + SIZE_OUT * i];
+	}
 	}
 }
 
 
-int compute(int16_t* src, Net* n, Color side_to_move) {
+void compute(int* dst, int16_t* src, Net* n, Color side_to_move) {
 
 	alignas(32)
 	int16_t P1[SIZE_F1];
 	int16_t P2[SIZE_F2];
 	int16_t P3[SIZE_F3];
-	int64_t P4;
+	int64_t P4[SIZE_OUT];
 	
-	ReLUClip<SIZE_F1, SHIFT_L0, MAX_L1>(P1, src + (side_to_move ? SIZE_F1 : 0));
+	ReLUClip<SIZE_F1, SHIFT_L1, MAX_L1>(P1, src + (side_to_move ? SIZE_F1 : 0));
 	compute_layer<SIZE_F2, SIZE_F1>(P2, P1, n->L1_a, n->L1_b);
-	ReLUClip<SIZE_F2, SHIFT_L1, MAX_L2>(P2, P2);
+	ReLUClip<SIZE_F2, SHIFT_L2, MAX_L2>(P2, P2);
 	compute_layer<SIZE_F3, SIZE_F2>(P3, P2, n->L2_a, n->L2_b);
-	ReLUClip<SIZE_F3, SHIFT_L2, MAX_L3>(P3, P3);
-	compute_L3(&P4, P3, n);
+	ReLUClip<SIZE_F3, SHIFT_L3, MAX_L3>(P3, P3);
+	compute_L3(P4, P3, n);
 
-	return int(P4);
+	for (int i = 0; i < SIZE_OUT; i++) {
+		dst[i] = int(P4[i]);
+	}
 }
 
 void verify_SIMD(Net* n) {
@@ -306,9 +298,6 @@ void verify_SIMD(Net* n) {
 	int16_t P1[SIZE_F1];
 	int16_t P2[SIZE_F2];
 	int16_t P2_F[SIZE_F2];
-	int16_t P3[SIZE_F3];
-	int16_t P3_F[SIZE_F3];
-	int64_t P, P_F;
 
 	Piece sq[64] = { };
 	
@@ -341,37 +330,14 @@ void verify_SIMD(Net* n) {
 
 	std::cout << "update_L0 error: " << p1_err << std::endl;
 
-	ReLUClip<SIZE_F1, SHIFT_L0, MAX_L1>(P1, P1_ACC);
+	ReLUClip<SIZE_F1, SHIFT_L1, MAX_L1>(P1, P1_ACC);
 	compute_layer<SIZE_F2, SIZE_F1>(P2, P1, n->L1_a, n->L1_b);
 	compute_layer_fallback<SIZE_F2, SIZE_F1>(P2_F, P1, n->L1_a, n->L1_b);
 
 	int p2_err = 0;
 	for (int i = 0; i < SIZE_F2; i++) {
-		if (P2[i] != P2_F[i]) { 
-			std::cout << P2[i] << ' ' << P2_F[i] << '\n';
-			p2_err++;
-		}
+		if (P2[i] != P2_F[i]) { p2_err++; }
 	}
 
 	std::cout << "compute_Layer error: " << p2_err << std::endl;
-
-	ReLUClip<SIZE_F2, SHIFT_L1, MAX_L2>(P2, P2);
-	compute_layer<SIZE_F3, SIZE_F2>(P3, P2, n->L2_a, n->L2_b);
-	ReLUClip<SIZE_F3, SHIFT_L2, MAX_L3>(P3, P3);
-	compute_L3(&P, P3, n);
-
-	ReLUClip_fallback<SIZE_F2, SHIFT_L1, MAX_L2>(P2_F, P2_F);
-	compute_layer_fallback<SIZE_F3, SIZE_F2>(P3_F, P2_F, n->L2_a, n->L2_b);
-	ReLUClip_fallback<SIZE_F3, SHIFT_L2, MAX_L3>(P3_F, P3_F);
-	compute_L3(&P_F, P3_F, n);
-
-	int p3_err = 0;
-	for (int i = 0; i < SIZE_F3; i++) {
-		if (P3[i] != P3_F[i]) {
-			std::cout << P3[i] << ' ' << P3_F[i] << '\n';
-			p3_err++;
-		}
-	}
-	std::cout << "compute error: " << p3_err << '\n'
-		<< P << ' ' << P_F << std::endl;
 }

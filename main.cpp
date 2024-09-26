@@ -147,6 +147,19 @@ int main() {
 			t.detach();
 		}
 
+		else if (word == "sttest") {
+			ss >> word;
+			int games = stoi(word);
+
+			ss >> word;
+			int depth_start = stoi(word);
+
+			ss >> word;
+			int depth_search = stoi(word);
+
+			net_strengthtest(games, depth_start, depth_search);
+		}
+
 		// Commands for debugging
 
 		else if (word == "moves") {

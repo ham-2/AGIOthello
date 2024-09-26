@@ -13,11 +13,12 @@ int eval(Position& board) {
 
 	node_count++;
 
-	int score = board.get_eval();
+	int v[SIZE_OUT];
+	board.get_eval(v);
+	int score = v[0] * board.get_count(EMPTY)
+		+ v[1] * (64 - board.get_count(EMPTY));
 
-	//score += ((rng.get() & 255) << 10) - ((rng.get() & 255) << 10);
-
-	return score;
+	return score >> 6;
 }
 
 string eval_print(int eval) {

@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <sstream>
+#include <cmath>
 
 #include "position.h"
 #include "movegen.h"
@@ -19,5 +20,6 @@ void solve();
 // Evaluation Benchmarks
 void net_speedtest();
 void net_verify();
+void net_strengthtest(int games, int depth_start, int depth_search);
 
 #endif

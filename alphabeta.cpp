@@ -19,7 +19,7 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 	if (legal_moves.list == legal_moves.end) {
 
 		if (board.get_passed()) {
-			int score = get_material(board) ^ EVAL_END;
+			int score = get_material_eval(board);
 
 			Main_TT.register_entry(root_key, 64, score, GAME_END);
 

@@ -24,13 +24,14 @@ inline std::string getcwd_wrap(char* dst, int bytes) {
 #include "misc.h"
 
 constexpr int SIZE_F0 = 128;
-constexpr int SIZE_F1 = 64;
-constexpr int SIZE_F2 = 32;
-constexpr int SIZE_F3 = 32;
+constexpr int SIZE_F1 = 128;
+constexpr int SIZE_F2 = 64;
+constexpr int SIZE_F3 = 64;
+constexpr int SIZE_OUT = 2;
 
-constexpr int SHIFT_L0 = 4;
-constexpr int SHIFT_L1 = 8;
-constexpr int SHIFT_L2 = 0;
+constexpr int SHIFT_L1 = 4;
+constexpr int SHIFT_L2 = 6;
+constexpr int SHIFT_L3 = 6;
 
 constexpr int MAX_L1 = 127;
 constexpr int MAX_L2 = 127;
@@ -52,8 +53,8 @@ struct Net {
 	int8_t L2_a[SIZE_F2 * SIZE_F3];
 	int16_t L2_b[SIZE_F3];
 
-	int16_t L3_a[SIZE_F3];
-	int32_t L3_b;
+	int16_t L3_a[SIZE_F3 * SIZE_OUT];
+	int32_t L3_b[SIZE_OUT];
 
 };
 
@@ -74,7 +75,7 @@ void compute_layer(int16_t* dst, int16_t* src,
 	               int8_t* a, int16_t* b);
 void compute_L3(int64_t* dst, int16_t* src, Net* n);
 
-int compute(int16_t* src, Net* n, Color side_to_move);
+void compute(int* dst, int16_t* src, Net* n, Color side_to_move);
 
 void verify_SIMD(Net* n);
 

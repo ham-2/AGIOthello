@@ -25,10 +25,12 @@ void convert_to_float(Net_train* dst, Net* src)
 	for (int i = 0; i < SIZE_F3; i++) {
 		dst->L2_b[i] = src->L2_b[i];
 	}
-	for (int i = 0; i < SIZE_F3; i++) {
+	for (int i = 0; i < SIZE_F3 * SIZE_OUT; i++) {
 		dst->L3_a[i] = src->L3_a[i];
 	}
-	dst->L3_b = src->L3_b;
+	for (int i = 0; i < SIZE_OUT; i++) {
+		dst->L3_b[i] = src->L3_b[i];
+	}
 
 	dst->m.unlock();
 }
@@ -55,10 +57,12 @@ void convert_to_int(Net* dst, Net_train* src)
 	for (int i = 0; i < SIZE_F3; i++) {
 		dst->L2_b[i] = src->L2_b[i];
 	}
-	for (int i = 0; i < SIZE_F3; i++) {
+	for (int i = 0; i < SIZE_F3 * SIZE_OUT; i++) {
 		dst->L3_a[i] = src->L3_a[i];
 	}
-	dst->L3_b = src->L3_b;
+	for (int i = 0; i < SIZE_OUT; i++) {
+		dst->L3_b[i] = src->L3_b[i];
+	}
 
 	src->m.unlock();
 }
@@ -116,7 +120,7 @@ void add_float(Net_train* dst, Net_train* src) {
 		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(16383.0f));
 		_mm256_store_ps(dst->L2_b + i, dst_);
 	}
-	for (int i = 0; i < SIZE_F3; i += 8) {
+	for (int i = 0; i < SIZE_F3 * SIZE_OUT; i += 8) {
 		__m256 dst_ = _mm256_load_ps(dst->L3_a + i);
 		__m256 src_ = _mm256_load_ps(src->L3_a + i);
 		dst_ = _mm256_add_ps(dst_, src_);
@@ -124,14 +128,62 @@ void add_float(Net_train* dst, Net_train* src) {
 		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(32767.0f));
 		_mm256_store_ps(dst->L3_a + i, dst_);
 	}
-
-	dst->L3_b += src->L3_b;
-	dst->L3_b = dst->L3_b > (1 << EVAL_BITS) ? (1 << EVAL_BITS) :
-		dst->L3_b < -(1 << EVAL_BITS) ? -(1 << EVAL_BITS) :
-		dst->L3_b;
+	for (int i = 0; i < SIZE_OUT; i++) {
+		dst->L3_b[i] += src->L3_b[i];
+	}
 
 	dst->m.unlock();
 	src->m.unlock();
+}
+
+template <int size_3, int size_2, int max_2, int shift_2>
+void back_b_(__m256 c, float* d_3, float* d_2,
+	int16_t* p2r, int8_t* a_2, float* b_1) {
+
+	for (int i = 0; i < size_2; i++) {
+		if (p2r[i] > (max_2 << shift_2) || p2r[i] < 0) { 
+			d_2[i] = 0;
+			continue;
+		}
+
+		float temp[8];
+		__m256 d_2_ = _mm256_setzero_ps();
+		for (int j = 0; j < size_3; j += 8) {
+			__m256 d_3_ = _mm256_load_ps(d_3 + j);
+			__m256 a_2_ = _mm256_cvtepi32_ps(
+				_mm256_cvtepi8_epi32(
+				_mm_load_si128((__m128i*)(a_2 + j + i * size_3))));
+			d_2_ = _mm256_add_ps(d_2_, _mm256_mul_ps(d_3_, a_2_));
+		}
+		d_2_ = _mm256_hadd_ps(d_2_, _mm256_setzero_ps());
+		d_2_ = _mm256_hadd_ps(d_2_, _mm256_setzero_ps());
+		d_2_ = _mm256_hadd_ps(d_2_, _mm256_setzero_ps());
+		_mm256_store_ps(temp, d_2_);
+		d_2[i] = temp[0] / (1 << shift_2);
+	}
+
+	for (int i = 0; i < size_2; i += 8) {
+		__m256 d_2_ = _mm256_load_ps(d_2 + i);
+		d_2_ = _mm256_mul_ps(d_2_, c);
+		__m256 b_1_ = _mm256_load_ps(b_1 + i);
+		b_1_ = _mm256_add_ps(b_1_, d_2_);
+		_mm256_store_ps(b_1 + i, b_1_);
+	}
+}
+
+template <int size_3, int size_2>
+void back_a_(__m256 c, float* d_3, float* a_2, int16_t* p2) {
+	for (int i = 0; i < size_2; i++) {
+		__m256 p2_ = _mm256_set1_ps(float(p2[i]));
+		for (int j = 0; j < size_3; j += 8) {
+			__m256 d_3_ = _mm256_load_ps(d_3 + j);
+			d_3_ = _mm256_mul_ps(d_3_, p2_);
+			d_3_ = _mm256_mul_ps(d_3_, c);
+			__m256 a2_ = _mm256_load_ps(a_2 + j + i * size_3);
+			a2_ = _mm256_add_ps(a2_, d_3_);
+			_mm256_store_ps(a_2 + j + i * size_3, a2_);
+		}
+	}
 }
 
 void backpropagate(Net_train* dst, Position* board,
@@ -144,7 +196,11 @@ void backpropagate(Net_train* dst, Position* board,
 	int16_t P2[SIZE_F2];
 	int16_t P3_RAW[SIZE_F3];
 	int16_t P3[SIZE_F3];
-	int64_t P;
+	int64_t P[SIZE_OUT];
+	int64_t PS;
+
+	float mg = float(board->get_count(EMPTY)) / 64;
+	float eg = 1 - mg;
 
 	float dPdP3R[SIZE_F3];
 	float dPdP2R[SIZE_F2];
@@ -153,81 +209,47 @@ void backpropagate(Net_train* dst, Position* board,
 	int16_t *acc = board->get_accumulator() + (board->get_side() ? SIZE_F1 : 0);
 	Net* n = board->get_net();
 
-	ReLUClip<SIZE_F1, SHIFT_L0, MAX_L1>(P1, acc);
+	ReLUClip<SIZE_F1, SHIFT_L1, MAX_L1>(P1, acc);
 	compute_layer<SIZE_F2, SIZE_F1>(P2_RAW, P1, n->L1_a, n->L1_b);
-	ReLUClip<SIZE_F2, SHIFT_L1, MAX_L2>(P2, P2_RAW);
+	ReLUClip<SIZE_F2, SHIFT_L2, MAX_L2>(P2, P2_RAW);
 	compute_layer<SIZE_F3, SIZE_F2>(P3_RAW, P2, n->L2_a, n->L2_b);
-	ReLUClip<SIZE_F3, SHIFT_L2, MAX_L3>(P3, P3_RAW);
-	compute_L3(&P, P3, n);
+	ReLUClip<SIZE_F3, SHIFT_L3, MAX_L3>(P3, P3_RAW);
+	compute_L3(P, P3, n);
+	PS = P[0] * mg + P[1] * eg;
 
 	// -dE/dP = true - curr
-	float _coeff = learning_rate * (score_true - P);
+	float _coeff = learning_rate * (score_true - PS);
 
 	// clip: only for loss
-	P = P > EVAL_ALL ? EVAL_ALL : P < EVAL_NONE ? EVAL_NONE : P;
-	*loss = 1.0 * (score_true - P) * (score_true - P);
+	PS = PS > EVAL_ALL ? EVAL_ALL : PS < EVAL_NONE ? EVAL_NONE : PS;
+	*loss = 1.0 * (score_true - PS) * (score_true - PS);
 
-	dst->L3_b += _coeff;
+	dst->L3_b[0] += _coeff * mg;
+	dst->L3_b[1] += _coeff * eg;
 
 	__m256 _coeff256 = _mm256_set1_ps(_coeff);
 
-	for (int i = 0; i < SIZE_F3; i += 8) {
-		__m128i __src16 = _mm_load_si128((__m128i*)(P3 + i));
-		__m256i __src32 = _mm256_cvtepi16_epi32(__src16);
-		__m256 _src = _mm256_cvtepi32_ps(__src32);
-		__m256 _dst = _mm256_load_ps(dst->L3_a + i);
-		
-		_src = _mm256_mul_ps(_coeff256, _src);
-		_dst = _mm256_add_ps(_dst, _src);
-		_mm256_store_ps(dst->L3_a + i, _dst);
-	}
+	for (int i = 0; i < SIZE_F3; i++) {
+		dst->L3_a[0 + i * SIZE_OUT] += _coeff * mg * P3[i];
+		dst->L3_a[1 + i * SIZE_OUT] += _coeff * eg * P3[i];
 
-	for (int i = 0; i < SIZE_F3; i ++) {
-		dPdP3R[i] = P3_RAW[i] > (MAX_L3 << SHIFT_L2) ? 0.0 :
-			P3_RAW[i] < 0 ? 0.0 : 1.0;
-
-		dPdP3R[i] *= n->L3_a[i] / (1 << SHIFT_L2);
+		dPdP3R[i] = P3_RAW[i] > (MAX_L3 << SHIFT_L3) ? 0.0 :
+			P3_RAW[i] < 0 ? 0.0 :
+			mg * n->L3_a[i] / (1 << SHIFT_L3) +
+			eg * n->L3_a[i + SIZE_F3] / (1 << SHIFT_L3);
 
 		dst->L2_b[i] += _coeff * dPdP3R[i];
 	}
 
-	for (int j = 0; j < SIZE_F2; j++) {
-		for (int i = 0; i < SIZE_F3; i++) {
-			dst->L2_a[i + j * SIZE_F3] += _coeff * dPdP3R[i] * P2[j];
-		}
-	}
+	back_a_<SIZE_F3, SIZE_F2>(_coeff256, dPdP3R, dst->L2_a, P2);
 
-	for (int i = 0; i < SIZE_F2; i++) {
-		double dP2dP2R = P2_RAW[i] > (MAX_L2 << SHIFT_L1) ? 0.0 :
-			P2_RAW[i] < 0 ? 0.0 : 1.0;
+	back_b_<SIZE_F3, SIZE_F2, MAX_L2, SHIFT_L2>
+		(_coeff256, dPdP3R, dPdP2R, P2_RAW, n->L2_a, dst->L1_b);
 
-		dPdP2R[i] = 0;
-		for (int k = 0; k < SIZE_F3; k++) {
-			dPdP2R[i] += dPdP3R[k] * n->L2_a[k + i * SIZE_F3];
-		}
-		dPdP2R[i] *= dP2dP2R / (1 << SHIFT_L1);
+	back_a_<SIZE_F2, SIZE_F1>(_coeff256, dPdP2R, dst->L1_a, P1);
 
-		dst->L1_b[i] += _coeff * dPdP2R[i];
-	}
-
-	for (int j = 0; j < SIZE_F1; j++) {
-		for (int i = 0; i < SIZE_F2; i++) {
-			dst->L1_a[i + j * SIZE_F2] += _coeff * dPdP2R[i] * P1[j];
-		}
-	}
-
-	for (int i = 0; i < SIZE_F1; i++) {
-		double dP1dP1R = acc[i] > (MAX_L1 << SHIFT_L0) ? 0.0 :
-			acc[i] < 0 ? 0.0 : 1.0;
-
-		dPdP1R[i] = 0;
-		for (int k = 0; k < SIZE_F2; k++) {
-			dPdP1R[i] += dPdP2R[k] * n->L1_a[k + i * SIZE_F2];
-		}
-		dPdP1R[i] *= dP1dP1R / (1 << SHIFT_L0);
-
-		dst->L0_b[i] += _coeff * dPdP1R[i];
-	}
+	back_b_<SIZE_F2, SIZE_F1, MAX_L1, SHIFT_L1>
+		(_coeff256, dPdP2R, dPdP1R, acc, n->L1_a, dst->L0_b);
 
 	Piece us = board->get_side() ? WHITE_P : BLACK_P;
 
@@ -375,8 +397,6 @@ int _play_best(Position* board, int find_depth)
 	}
 }
 
-const char* startpos_fen_ = "8/8/8/3@O3/3O@3/8/8/8 b";
-
 void _do_learning_thread(Net_train* src,
 	Position* board, atomic<bool>* stop, 
 	atomic<double>* loss, atomic<uint64_t>* games,
@@ -394,7 +414,7 @@ void _do_learning_thread(Net_train* src,
 		memset(&dst_, 0, sizeof(Net_train));
 
 		for (int rep = 0; rep < THREAD_LOOP; rep++) {
-			board->set(startpos_fen_);
+			board->set(startpos_fen);
 			int depth = 0;
 
 			while ((depth < 60 - find_depth) &&
