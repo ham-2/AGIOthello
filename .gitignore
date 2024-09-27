@@ -368,3 +368,4 @@ FodyWeavers.xsd
 /data/train_result.xlsx
 /data/AGIOthello data.txt
 /data/movegen_result.xlsx
+/data/weights/weights-128-64-64-2.bin

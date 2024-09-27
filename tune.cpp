@@ -1,6 +1,6 @@
 #include "tune.h"
 
-constexpr int LOSS_SMOOTH = (1 << 14);
+constexpr int LOSS_SMOOTH = (1 << 12);
 constexpr int THREAD_LOOP = 16;
 
 void convert_to_float(Net_train* dst, Net* src) 
@@ -464,9 +464,8 @@ void do_learning(Net* dst, Net* src, uint64_t games, int threads, int find_depth
 	}
 
 	for (int i = 0; i < threads; i++) {
-		delete boards[i];
-
 		thread_[i].join();
+		delete boards[i];
 	}
 
 	convert_to_int(dst, &curr);
