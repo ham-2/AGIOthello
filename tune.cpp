@@ -1,7 +1,7 @@
 #include "tune.h"
 
-constexpr int LOSS_SMOOTH = 8192;
-constexpr int THREAD_LOOP = 8;
+constexpr int LOSS_SMOOTH = (1 << 14);
+constexpr int THREAD_LOOP = 16;
 
 void convert_to_float(Net_train* dst, Net* src) 
 {
@@ -187,9 +187,8 @@ void back_a_(__m256 c, float* d_3, float* a_2, int16_t* p2) {
 }
 
 void backpropagate(Net_train* dst, Position* board,
-	int score_true, double* loss, double learning_rate)
+	int score_true, atomic<double>* loss, double learning_rate)
 {
-
 	alignas(32)
 	int16_t P1[SIZE_F1];
 	int16_t P2_RAW[SIZE_F2];
@@ -222,7 +221,8 @@ void backpropagate(Net_train* dst, Position* board,
 
 	// clip: only for loss
 	PS = PS > EVAL_ALL ? EVAL_ALL : PS < EVAL_NONE ? EVAL_NONE : PS;
-	*loss = 1.0 * (score_true - PS) * (score_true - PS);
+	*loss = double(score_true - PS) * (score_true - PS)
+		+ (*loss) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
 
 	dst->L3_b[0] += _coeff * mg;
 	dst->L3_b[1] += _coeff * eg;
@@ -270,54 +270,6 @@ void backpropagate(Net_train* dst, Position* board,
 	}
 }
 
-int _solve_learning(Position* board)
-{
-
-	MoveList legal_moves;
-	legal_moves.generate(*board);
-
-	if (legal_moves.list == legal_moves.end) {
-
-		if (board->get_passed()) {
-			int bc = popcount(board->get_pieces(BLACK_P));
-			int wc = popcount(board->get_pieces(WHITE_P));
-			return board->get_side() ? wc - bc : bc - wc;
-		}
-
-		else {
-			Undo u;
-			board->do_null_move(&u);
-			int after_pass = -_solve_learning(board);
-			board->undo_null_move();
-			return after_pass;
-		}
-	}
-
-	// Legal moves
-	else {
-		Square s;
-		int new_eval = EVAL_INIT;
-
-		for (int i = 0; i < legal_moves.length(); i++) {
-			s = legal_moves.list[i];
-
-			// Do move
-			Undo u;
-			board->do_move(s, &u);
-
-			int comp_eval = -_solve_learning(board);
-
-			if (comp_eval > new_eval) {
-				new_eval = comp_eval;
-			}
-
-			board->undo_move();
-		}
-
-		return new_eval;
-	}
-}
-
 int _play_rand(Position* board, PRNG* rng_) 
 {	
 	MoveList legal_moves;
@@ -345,28 +297,34 @@ int _play_rand(Position* board, PRNG* rng_)
 	}
 }
 
-int _play_best(Position* board, int find_depth)
+struct PBS {
+	Net_train* dst_;
+	atomic<double>* loss_curr;
+	atomic<double>* loss_base;
+	double lr;
+};
+
+int _play_best(Position* board, int find_depth, PBS* p)
 {
 	MoveList legal_moves;
 	legal_moves.generate(*board);
+	int score_true;
 
 	if (legal_moves.list == legal_moves.end) {
-
-		if (board->get_passed()) {
-			return 0;
+		if (board->get_passed()) { 
+			// WDL training
+			score_true = get_material_eval(*board);
+			score_true = score_true > 0 ? EVAL_ALL :
+				score_true < 0 ? EVAL_NONE : 0;
+			return score_true;
 		}
-
-		else {
-			Undo* u = new Undo;
-			board->do_null_move(u);
-			u->del = true;
-			return 1;
-		}
+		Undo u;
+		board->do_null_move(&u);
+		score_true = -_play_best(board, find_depth, p);
+		board->undo_null_move();
 	}
 
-	// Legal moves
 	else {
-
 		Square s;
 		Square nmove = NULL_MOVE;
 		int comp_eval;
@@ -374,27 +332,33 @@ int _play_best(Position* board, int find_depth)
 
 		for (int i = 0; i < legal_moves.length(); i++) {
 			s = legal_moves.list[i];
-
-			// Do move
 			Undo u;
 			board->do_move(s, &u);
-
-			comp_eval = -_solve_learning(board);
-
+			comp_eval = -find_best(*board, find_depth,
+				EVAL_MIN, -new_eval);
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
 				nmove = s;
 			}
-
 			board->undo_move();
 		}
 
-		Undo* u = new Undo;
-		board->do_move(nmove, u);
-		u->del = true;
-
-		return 1;
+		Undo u;
+		board->do_move(nmove, &u);
+		score_true = -_play_best(board, find_depth, p);
+		board->undo_move();
 	}
+
+	backpropagate(p->dst_, board,
+		score_true, p->loss_curr, p->lr);
+
+	int score_base = get_material(*board);
+	score_base = score_base > 0 ? EVAL_ALL :
+		score_base < 0 ? EVAL_NONE : 0;
+	*(p->loss_base) = double(score_true - score_base) * (score_true - score_base)
+		+ *(p->loss_base) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
+
+	return score_true;
 }
 
 void _do_learning_thread(Net_train* src,
@@ -406,8 +370,7 @@ void _do_learning_thread(Net_train* src,
 	Net_train dst_;
 	board->set_net(&tmp);
 
-	double loss_total, loss_curr, loss_base;
-	atomic<double>* loss_base_dst = loss + 32;
+	atomic<double>* loss_base = loss + 32;
 
 	while (!(*stop)) {
 		convert_to_int(&tmp, src);
@@ -417,54 +380,15 @@ void _do_learning_thread(Net_train* src,
 			board->set(startpos_fen);
 			int depth = 0;
 
-			while ((depth < 60 - find_depth) &&
+			while ((depth < 16) &&
 				_play_rand(board, &p) > 0) {
 				depth++;
 			}
 			board->set_squares();
 			board->set_accumulator();
-			int depth_begin = depth;
 
-			while (_play_best(board, find_depth) > 0) {
-				depth++;
-			}
-			int depth_end = depth;
-
-			int score_true = _solve_learning(board);
-
-			// WDL training
-			score_true = score_true > 0 ? EVAL_ALL :
-				score_true < 0 ? EVAL_NONE : 0;
-
-			loss_total = 0;
-			loss_base = 0;
-			// skip last null move
-			if (depth > depth_begin) { 
-				score_true = -score_true;
-				board->undo_move();
-			}
-
-			while (true) {
-				backpropagate(&dst_, board,
-					score_true, &loss_curr, lr);
-
-				loss_total += loss_curr;
-
-				int score_base = get_material(*board);
-				score_base = score_base > 0 ? EVAL_ALL :
-					score_base < 0 ? EVAL_NONE : 0;
-				loss_base += double(score_true - score_base) * (score_true - score_base);
-
-				score_true = -score_true;
-				depth--;
-				if (depth > depth_begin) { board->undo_move(); }
-				else { break; }
-			}
-			loss_total /= (depth_end - depth_begin + 1);
-			loss_base  /= (depth_end - depth_begin + 1);
-
-			*loss = loss_total + (*loss) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
-			*loss_base_dst = loss_base + (*loss_base_dst) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
+			PBS p = { &dst_, loss, loss_base, lr };
+			_play_best(board, find_depth, &p);
 			
 			(*games)++;
 		}

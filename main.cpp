@@ -147,7 +147,7 @@ int main() {
 			t.detach();
 		}
 
-		else if (word == "sttest") {
+		else if (word == "testn") {
 			ss >> word;
 			int games = stoi(word);
 
@@ -157,7 +157,19 @@ int main() {
 			ss >> word;
 			int depth_search = stoi(word);
 
-			net_strengthtest(games, depth_start, depth_search);
+			ss >> word;
+			if (word[0] == 'n') {
+				Net n;
+				ss >> word;
+				load_weights(&n, word);
+				test_net_n(games, depth_start, depth_search, &n);
+			}
+			else if (word[0] == 'g') {
+				test_net_rg(games, depth_start, depth_search, true);
+			}
+			else if (word[0] == 'r') {
+				test_net_rg(games, depth_start, depth_search, false);
+			}
 		}
 
 		// Commands for debugging

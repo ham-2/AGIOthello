@@ -213,10 +213,9 @@ void Position::set_squares() {
 		sqc[squares[s]]++;
 	}
 
-	piece_count[EMPTY] = popcount(pieces[EMPTY]);
+	piece_count[EMPTY]   = popcount(pieces[EMPTY]);
 	piece_count[BLACK_P] = popcount(pieces[BLACK_P]);
 	piece_count[WHITE_P] = popcount(pieces[WHITE_P]);
-	for (int i = 0; i < 3; i++) { if (sqc[i] != piece_count[i]) { throw; } }
 }
 
 void Position::show() {
@@ -225,15 +224,16 @@ void Position::show() {
 
 ostream& operator<<(ostream& os, Position& pos) {
 	// Show board
-	Square sq = A8;
+	Square sq = A1;
 	for (int i = 0; i < 8; i++) {
+		os << i + 1 << '|';
 		for (int j = 0; j < 8; j++) {
-			os << print_piece(pos.squares[sq]) << " ";
+			os << print_piece(pos.squares[sq]) << '|';
 			++sq;
 		}
-		sq += (-16);
-		os << "\n";
+		os << "\n-+-+-+-+-+-+-+-+-+-\n";
 	}
+	os << "  a|b|c|d|e|f|g|h\n";
 
 	if (pos.side_to_move) { os << "White to move"; }
 	else { os << "Black to move"; }

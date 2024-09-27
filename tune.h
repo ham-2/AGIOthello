@@ -1,10 +1,12 @@
 #ifndef LEARNING_INCLUDED
 #define LEARNING_INCLUDED
 
+#include <cassert>
 #include <cstdint>
 #include <iomanip>
 #include <mutex>
 
+#include "benchmark.h"
 #include "eval.h"
 #include "position.h"
 #include "movegen.h"
