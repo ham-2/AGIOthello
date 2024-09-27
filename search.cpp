@@ -7,7 +7,7 @@
 
 using namespace std;
 
-bool stop_if_mate = true;
+bool stop_if_mate = false;
 
 bool ponder = false;
 atomic<bool> ponder_continue(false);
