@@ -162,6 +162,7 @@ void back_b_(__m256 c, float* d_3, float* d_2,
 		d_2[i] = temp[0] / (1 << shift_2);
 	}
 
+	c = _mm256_mul_ps(c, _mm256_set1_ps(128.0));
 	for (int i = 0; i < size_2; i += 8) {
 		__m256 d_2_ = _mm256_load_ps(d_2 + i);
 		d_2_ = _mm256_mul_ps(d_2_, c);
@@ -221,11 +222,11 @@ void backpropagate(Net_train* dst, Position* board,
 
 	// clip: only for loss
 	PS = PS > EVAL_ALL ? EVAL_ALL : PS < EVAL_NONE ? EVAL_NONE : PS;
-	*loss = double(score_true - PS) * (score_true - PS)
-		+ (*loss) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
+	double loss_ = double(score_true - PS) * (score_true - PS);
+	*loss = loss_ + (*loss) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
 
-	dst->L3_b[0] += _coeff * mg;
-	dst->L3_b[1] += _coeff * eg;
+	dst->L3_b[0] += _coeff * mg * (1 << 8);
+	dst->L3_b[1] += _coeff * eg * (1 << 8);
 
 	__m256 _coeff256 = _mm256_set1_ps(_coeff);
 
@@ -238,7 +239,7 @@ void backpropagate(Net_train* dst, Position* board,
 			mg * n->L3_a[i] / (1 << SHIFT_L3) +
 			eg * n->L3_a[i + SIZE_F3] / (1 << SHIFT_L3);
 
-		dst->L2_b[i] += _coeff * dPdP3R[i];
+		dst->L2_b[i] += _coeff * dPdP3R[i] * (1 << 8);
 	}
 
 	back_a_<SIZE_F3, SIZE_F2>(_coeff256, dPdP3R, dst->L2_a, P2);
@@ -350,7 +351,8 @@ int _play_best(Position* board, int find_depth, PBS* p)
 	}
 
 	backpropagate(p->dst_, board,
-		score_true, p->loss_curr, p->lr);
+		score_true * (64 - board->get_count(EMPTY)) / 64, 
+		p->loss_curr, p->lr);
 
 	int score_base = get_material(*board);
 	score_base = score_base > 0 ? EVAL_ALL :
@@ -364,7 +366,7 @@ int _play_best(Position* board, int find_depth, PBS* p)
 void _do_learning_thread(Net_train* src,
 	Position* board, atomic<bool>* stop, 
 	atomic<double>* loss, atomic<uint64_t>* games,
-	int find_depth, double lr, PRNG p) 
+	int find_depth, int rand_depth, double lr, PRNG p) 
 {
 	Net tmp;
 	Net_train dst_;
@@ -380,7 +382,7 @@ void _do_learning_thread(Net_train* src,
 			board->set(startpos_fen);
 			int depth = 0;
 
-			while ((depth < 16) &&
+			while ((depth < rand_depth) &&
 				_play_rand(board, &p) > 0) {
 				depth++;
 			}
@@ -398,7 +400,8 @@ void _do_learning_thread(Net_train* src,
 
 }
 
-void do_learning(Net* dst, Net* src, uint64_t games, int threads, int find_depth, double lr) {
+void do_learning(Net* dst, Net* src, uint64_t games,
+	int threads, int find_depth, int rand_depth, double lr) {
 
 	PRNG rng_0(3245356235923498ULL);
 
@@ -425,7 +428,7 @@ void do_learning(Net* dst, Net* src, uint64_t games, int threads, int find_depth
 		thread_[i] = thread(
 			_do_learning_thread,
 			&curr, boards[i], &(Threads.stop), 
-			loss + i, &games_, find_depth,
+			loss + i, &games_, find_depth, rand_depth,
 			lr, PRNG(rng_0.get())
 		);
 	}

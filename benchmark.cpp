@@ -421,84 +421,12 @@ int play_n(Position& board1, Position& board2, int sd) {
 	}
 }
 
-void test_net_rg(int games, int depth_start, int depth_search, bool g) {
-	Position board1(Threads.n);
-
-	if (g) { cout << "vs Greedy \n"; }
-	else { cout << "vs Random \n"; }
-
-	int win = 0;
-	int draw = 0;
-	int loss = 0;
-
-	system_clock::time_point time_start = system_clock::now();
-	milliseconds time = milliseconds(0);
-
-	for (int i = 0; i < games; i++) {
-		board1.set(startpos_fen);
-
-		for (int j = 0; j < depth_start; j++) {
-			MoveList legal_moves;
-			legal_moves.generate(board1);
-			if (legal_moves.list == legal_moves.end) {
-				if (board1.get_passed()) { break; }
-				Undo* u1 = new Undo;
-				board1.do_null_fast(u1);
-				u1->del = true;
-			}
-			else {
-				Square m = legal_moves.list[rng.get() % legal_moves.length()];
-				Undo* u1 = new Undo;
-				board1.do_move_fast(m, u1);
-				u1->del = true;
-			}
-		}
-
-		if (board1.get_passed()) {
-			MoveList legal_moves;
-			legal_moves.generate(board1);
-			if (legal_moves.list == legal_moves.end) {
-				i--;
-				continue;
-			}
-		}
-
-		board1.set_squares();
-		board1.set_accumulator();
-		int score1, score2;
-		if (g) {
-			score1 = play_g(board1, depth_search - 1, false);
-			score2 = play_g(board1, depth_search - 1, true);
-		}
-		else {
-			score1 = play_r(board1, depth_search - 1, false);
-			score2 = play_r(board1, depth_search - 1, true);
-		}
-		score1 = score1 > 0 ? 1 : score1 < 0 ? -1 : 0;
-		score2 = score2 > 0 ? -1 : score2 < 0 ? 1 : 0;
-		if (score1 + score2 == 0) { draw++; }
-		else if (score1 + score2 > 0) { win++; }
-		else { loss++; }
-	}
-
-	system_clock::time_point time_now = system_clock::now();
-	time = duration_cast<milliseconds>(time_now - time_start);
-
-	double elo_diff = log10(double(games) / (0.01 + loss + double(draw) / 2) - 1) * 400;
-
-	cout << "+" << win << " =" << draw << " -" << loss
-		<< "\nelo " << int(elo_diff)
-		<< "\ntime " << time.count() << "ms" << endl;
-}
-
-void test_net_n(int games, int depth_start, int depth_search, Net* n) {
+void test_thread_(int type, int games, int depth_start, int depth_search, 
+	int* res, Net* n) 
+{
 	Position board1(Threads.n);
 	Position board2(n);
 
-	cout << "vs Net \n";
-	zero_weights(n);
-	rand_weights(n, 6);
-	
 	int win  = 0;
 	int draw = 0;
 	int loss = 0;
@@ -508,7 +436,6 @@ void test_net_n(int games, int depth_start, int depth_search, Net* n) {
 
 	for (int i = 0; i < games; i++) {
 		board1.set(startpos_fen);
-		board2.set(startpos_fen);
 
 		for (int j = 0; j < depth_start; j++) {
 			MoveList legal_moves;
@@ -516,20 +443,14 @@ void test_net_n(int games, int depth_start, int depth_search, Net* n) {
 			if (legal_moves.list == legal_moves.end) {
 				if (board1.get_passed()) { break; }
 				Undo* u1 = new Undo;
-				Undo* u2 = new Undo;
 				board1.do_null_fast(u1);
-				board2.do_null_fast(u2);
 				u1->del = true;
-				u2->del = true;
 			}
 			else {
 				Square m = legal_moves.list[rng.get() % legal_moves.length()];
 				Undo* u1 = new Undo;
-				Undo* u2 = new Undo;
 				board1.do_move_fast(m, u1);
-				board2.do_move_fast(m, u2);
 				u1->del = true;
-				u2->del = true;
 			}
 		}
 
@@ -544,16 +465,81 @@ void test_net_n(int games, int depth_start, int depth_search, Net* n) {
 
 		board1.set_squares();
 		board1.set_accumulator();
-		board2.set_squares();
-		board2.set_accumulator();
 
-		int score1 = play_n(board1, board2, depth_search - 1);
-		int score2 = play_n(board2, board1, depth_search - 1);
+		int score1, score2;
+
+		switch (type) {
+		case 0: {
+			score1 = play_r(board1, depth_search - 1, false);
+			score2 = play_r(board1, depth_search - 1, true);
+			break;
+		}
+		case 1: {
+			score1 = play_g(board1, depth_search - 1, false);
+			score2 = play_g(board1, depth_search - 1, true);
+			break;
+		}
+		case 2: {
+			board2 = board1;
+			board2.set_accumulator();
+
+			score1 = play_n(board1, board2, depth_search - 1);
+			score2 = play_n(board2, board1, depth_search - 1);
+			break;
+		}
+		}
+
 		score1 = score1 > 0 ? 1 : score1 < 0 ? -1 : 0;
 		score2 = score2 > 0 ? -1 : score2 < 0 ? 1 : 0;
-		if (score1 + score2 == 0) { draw++; }
-		else if (score1 + score2 > 0) { win++; }
-		else { loss++; }
+		if (score1 + score2 == 0) { res[1]++; }
+		else if (score1 + score2 > 0) { res[0]++; }
+		else { res[2]++; }
+	}
+
+	res[0] += win;
+	res[1] += draw;
+	res[2] += loss;
+}
+
+
+void test_net(int threads, int games, int depth_start, int depth_search, int type,
+	 Net* n) 
+{
+	cout << "Testing with " << threads << " Threads, ";
+	switch (type) {
+	case 0: {
+		cout << "vs Random \n";
+		break;
+	}
+	case 1: {
+		cout << "vs Greedy \n";
+		break;
+	}
+	case 2: {
+		cout << "vs Net \n";
+		break;
+	}
+	}
+
+	int win  = 0;
+	int draw = 0;
+	int loss = 0;
+	int res[32][3] = {};
+	thread* t[32];
+
+	system_clock::time_point time_start = system_clock::now();
+	milliseconds time = milliseconds(0);
+
+	for (int i = 0; i < threads; i++) {
+		int games_ = (i == 0) ? games - (games / threads) * (threads - 1) : (games / threads);
+		t[i] = new thread(test_thread_, type, games_, depth_start, depth_search, res[i], n);
+	}
+
+	for (int i = 0; i < threads; i++) {
+		t[i]->join();
+		win += res[i][0];
+		draw += res[i][1];
+		loss += res[i][2];
 	}
 
 	system_clock::time_point time_now = system_clock::now();

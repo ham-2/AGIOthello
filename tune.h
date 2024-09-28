@@ -30,6 +30,7 @@ struct Net_train {
 	float L3_b[SIZE_OUT];
 };
 
-void do_learning(Net* dst, Net* src, uint64_t games, int threads, int find_depth, double lr);
+void do_learning(Net* dst, Net* src, uint64_t games,
+	int threads, int find_depth, int rand_depth, double lr);
 
 #endif

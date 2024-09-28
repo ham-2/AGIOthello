@@ -426,11 +426,13 @@ void Position::undo_move_fast() {
 }
 
 Position& Position::operator=(const Position board) {
+	Net* temp = net;
 	clear_stack();
 	delete undo_stack;
 	memcpy(this, &board, sizeof(Position));
 	undo_stack = new Undo;
 	memcpy(undo_stack, board.undo_stack, sizeof(Undo));
 	undo_stack->prev = nullptr;
+	net = temp;
 	return *this;
 }

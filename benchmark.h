@@ -20,8 +20,7 @@ void solve();
 // Evaluation Benchmarks
 void net_speedtest();
 void net_verify();
-void test_net_rg(int games, int depth_start, int depth_search, bool g);
-void test_net_n(int games, int depth_start, int depth_search, Net* n);
+void test_net(int threads, int games, int depth_start, int depth_search, int type, Net* n);
 
 int find_best(Position& board, int depth,
 	int alpha, int beta);

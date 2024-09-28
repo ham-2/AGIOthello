@@ -42,6 +42,19 @@ void save_weights(Net* net, std::string filename)
 	output.close();
 }
 
+void write_weights(Net* net) {
+	std::cout << "\n{";
+	size_t s = 0;
+	while (true) {
+		std::cout << "0x" << std::hex << (uint64_t)(*((uint64_t*)(net)+s));
+		if ((++s) < sizeof(Net) / sizeof(uint64_t)) {
+			std::cout << ", ";
+		}
+		else { break; }
+	}
+	std::cout << "};";
+}
+
 void rand_weights(Net* net, int bits) {
 	if (bits < 0) { return; }
 	bits = bits > 7 ? 7 : bits;
@@ -99,7 +112,7 @@ void _sub_L0(int16_t* dst, int addr, Net* n) {
 	}
 #else
 	for (int i = 0; i < SIZE_F1; i++) {
-		dst[i] -= n[addr + i];
+		dst[i] -= n->L0_a[addr + i];
 	}
 #endif
 }
@@ -114,7 +127,7 @@ void _add_L0(int16_t* dst, int addr, Net* n) {
 	}
 #else
 	for (int i = 0; i < SIZE_F1; i++) {
-		dst[i] += n[addr + i];
+		dst[i] += n->L0_a[addr + i];
 	}
 #endif
 }

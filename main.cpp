@@ -30,7 +30,7 @@ int main() {
 
 	system_clock::time_point time_now = system_clock::now();
 	startup_time = duration_cast<milliseconds>(time_now - time_start);
-	cout << nounitbuf << "\nAGIOthello alpha\n" 
+	cout << nounitbuf << "\nTopoki Is Good Beta\n" 
 		<< "Startup took " << startup_time.count() << "ms\n" << endl;
 
 	while (true) {
@@ -43,7 +43,7 @@ int main() {
 		if (word == "quit") { break; }
 
 		else if (word == "uci") {
-			cout << "id name AGIOthello\n"
+			cout << "id name Topoki Is Good beta\n"
 				<< "id author Seungrae Kim" << endl;
 			// Options
 			print_option();
@@ -139,15 +139,38 @@ int main() {
 			int find_depth = stoi(word);
 
 			ss >> word;
+			int rand_depth = stoi(word);
+
+			ss >> word;
 			double lr = stod(word);
 
 			thread t = thread(do_learning,
 				Threads.n, Threads.n,
-				games, threads, find_depth, lr);
+				games, threads, find_depth, rand_depth, lr);
 			t.detach();
 		}
 
-		else if (word == "testn") {
+		else if (word == "testnet") {
+			Net* n = nullptr;
+			int type;
+
+			ss >> word;
+			if (word[1] == 'n') {
+				n = new Net;
+				ss >> word;
+				load_weights(n, word);
+				type = 2;
+			}
+			else if (word[1] == 'g') {
+				type = 1;
+			}
+			else if (word[1] == 'r') {
+				type = 0;
+			}
+
+			ss >> word;
+			int threads = stoi(word);
+
 			ss >> word;
 			int games = stoi(word);
 
@@ -157,19 +180,8 @@ int main() {
 			ss >> word;
 			int depth_search = stoi(word);
 
-			ss >> word;
-			if (word[0] == 'n') {
-				Net n;
-				ss >> word;
-				load_weights(&n, word);
-				test_net_n(games, depth_start, depth_search, &n);
-			}
-			else if (word[0] == 'g') {
-				test_net_rg(games, depth_start, depth_search, true);
-			}
-			else if (word[0] == 'r') {
-				test_net_rg(games, depth_start, depth_search, false);
-			}
+			test_net(threads, games, depth_start, depth_search, type, n);
+			if (n != nullptr) { delete n; }
 		}
 
 		// Commands for debugging
@@ -231,6 +243,10 @@ int main() {
 			Threads.set_weights();
 		}
 
+		else if (word == "write") {
+			write_weights(Threads.n);
+		}
+		
 	}
 
 	return 44;

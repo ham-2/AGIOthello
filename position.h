@@ -20,6 +20,7 @@ struct Undo {
 	Bitboard captured;
 
 	// For eval
+	alignas(32)
 	int16_t accumulator[2 * SIZE_F1];
 
 	// Other useful informations
