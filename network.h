@@ -29,9 +29,9 @@ constexpr int SIZE_F2 = 64;
 constexpr int SIZE_F3 = 64;
 constexpr int SIZE_OUT = 2;
 
-constexpr int SHIFT_L1 = 0;
-constexpr int SHIFT_L2 = 8;
-constexpr int SHIFT_L3 = 8;
+constexpr int SHIFT_L1 = 2;
+constexpr int SHIFT_L2 = 7;
+constexpr int SHIFT_L3 = 7;
 
 constexpr int MAX_L1 = 127;
 constexpr int MAX_L2 = 127;
@@ -63,7 +63,7 @@ void rand_weights(Net* net, int bits);
 
 void set_material(Net* net);
 
-void load_weights(Net* net, std::string filename);
+int load_weights(Net* net, std::string filename);
 void save_weights(Net* net, std::string filename);
 void write_weights(Net* net);
 

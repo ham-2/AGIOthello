@@ -2,6 +2,9 @@
 
 constexpr int LOSS_SMOOTH = (1 << 12);
 constexpr int THREAD_LOOP = 16;
+constexpr int SOLVE_DEPTH = 9;
+
+constexpr int AUTOSAVE_S = 1200;
 
 void convert_to_float(Net_train* dst, Net* src) 
 {
@@ -303,6 +306,7 @@ struct PBS {
 	atomic<double>* loss_curr;
 	atomic<double>* loss_base;
 	double lr;
+	PRNG* r;
 };
 
 int _play_best(Position* board, int find_depth, PBS* p)
@@ -310,6 +314,8 @@ int _play_best(Position* board, int find_depth, PBS* p)
 	MoveList legal_moves;
 	legal_moves.generate(*board);
 	int score_true;
+
+	if (board->get_count(EMPTY) < SOLVE_DEPTH) { find_depth = SOLVE_DEPTH; }
 
 	if (legal_moves.list == legal_moves.end) {
 		if (board->get_passed()) { 
@@ -337,6 +343,7 @@ int _play_best(Position* board, int find_depth, PBS* p)
 			board->do_move(s, &u);
 			comp_eval = -find_best(*board, find_depth,
 				EVAL_MIN, -new_eval);
+
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
 				nmove = s;
@@ -351,7 +358,7 @@ int _play_best(Position* board, int find_depth, PBS* p)
 	}
 
 	backpropagate(p->dst_, board,
-		score_true * (64 - board->get_count(EMPTY)) / 64, 
+		score_true, 
 		p->loss_curr, p->lr);
 
 	int score_base = get_material(*board);
@@ -366,7 +373,7 @@ int _play_best(Position* board, int find_depth, PBS* p)
 void _do_learning_thread(Net_train* src,
 	Position* board, atomic<bool>* stop, 
 	atomic<double>* loss, atomic<uint64_t>* games,
-	int find_depth, int rand_depth, double lr, PRNG p) 
+	int find_depth, int rand_depth, double lr, PRNG* p) 
 {
 	Net tmp;
 	Net_train dst_;
@@ -383,14 +390,14 @@ void _do_learning_thread(Net_train* src,
 			int depth = 0;
 
 			while ((depth < rand_depth) &&
-				_play_rand(board, &p) > 0) {
+				_play_rand(board, p) > 0) {
 				depth++;
 			}
 			board->set_squares();
 			board->set_accumulator();
 
-			PBS p = { &dst_, loss, loss_base, lr };
-			_play_best(board, find_depth, &p);
+			PBS pb = { &dst_, loss, loss_base, lr, p };
+			_play_best(board, find_depth, &pb);
 			
 			(*games)++;
 		}
@@ -412,6 +419,7 @@ void do_learning(Net* dst, Net* src, uint64_t games,
 	atomic<uint64_t> games_(0);
 	thread thread_[64];
 	Position* boards[64];
+	int save_next = AUTOSAVE_S;
 
 	double loss_, loss_base_;
 
@@ -424,12 +432,13 @@ void do_learning(Net* dst, Net* src, uint64_t games,
 
 	for (int i = 0; i < threads; i++) {
 		boards[i] = new Position(nullptr);
+		PRNG* n = new PRNG(rng_0.get());
 		
 		thread_[i] = thread(
 			_do_learning_thread,
-			&curr, boards[i], &(Threads.stop), 
+			&curr, boards[i], &(Threads.stop),
 			loss + i, &games_, find_depth, rand_depth,
-			lr, PRNG(rng_0.get())
+			lr, n
 		);
 	}
 
@@ -457,13 +466,21 @@ void do_learning(Net* dst, Net* src, uint64_t games,
 		system_clock::time_point time_now = system_clock::now();
 		time = duration_cast<milliseconds>(time_now - time_start);
 
+		double accuracy = 100 - sqrt(loss_ / LOSS_SMOOTH) * 50 / EVAL_ALL;
 		std::cout
 			<< "Time: " << std::setw(7) << time.count() / 1000 << "s // "
 			<< "Games: " << std::setw(7) << std::fixed << float(games_ / 1000) / 1000 << "M // "
-			<< "Acc: " << std::setw(5) << 100 - sqrt(loss_ / LOSS_SMOOTH) * 50 / EVAL_ALL << "% // "
+			<< "Acc: " << std::setw(5) << accuracy << "% // "
 			<< "Acc_Baseline: " << std::setw(5) << 100 - sqrt(loss_base_ / LOSS_SMOOTH) * 50 / EVAL_ALL << "% // "
 			<< "Loss: " << std::scientific << loss_
 			<< std::endl;
+
+		if (time.count() / 1000 > save_next) {
+			convert_to_int(dst, &curr);
+			save_weights(dst, "temp-" + to_string(time.count() / 1000) 
+				+ "-acc" + to_string(int(accuracy)) + ".bin");
+			save_next += AUTOSAVE_S;
+		}
 	}
 
 	for (int i = 0; i < threads; i++) {

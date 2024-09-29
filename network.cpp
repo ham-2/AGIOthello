@@ -2,7 +2,7 @@
 
 // Read / Write / Modify
 
-void load_weights(Net* net, std::string filename)
+int load_weights(Net* net, std::string filename)
 {
 	char filename_buf[256];
 	filename = getcwd_wrap(filename_buf, 256) + filename;
@@ -14,12 +14,14 @@ void load_weights(Net* net, std::string filename)
 
 	if (input.fail() || (input.peek() != EOF)) {
 		std::cout << "Failed to load weights" << std::endl;
+		return -1;
 	}
 	else {
 		std::cout << "Loaded weights from \"" << filename << "\"" << std::endl;
 	}
 
 	input.close();
+	return 0;
 }
 
 void save_weights(Net* net, std::string filename)

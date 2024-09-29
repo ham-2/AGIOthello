@@ -153,12 +153,14 @@ int main() {
 		else if (word == "testnet") {
 			Net* n = nullptr;
 			int type;
+			string dir;
+			int end = 0;
 
 			ss >> word;
 			if (word[1] == 'n') {
 				n = new Net;
 				ss >> word;
-				load_weights(n, word);
+				if (load_weights(n, word)) { continue; }
 				type = 2;
 			}
 			else if (word[1] == 'g') {
@@ -166,6 +168,12 @@ int main() {
 			}
 			else if (word[1] == 'r') {
 				type = 0;
+			}
+			else if (word[1] == 'b') {
+				ss >> word;
+				dir = word;
+				ss >> word;
+				end = stoi(word);
 			}
 
 			ss >> word;
@@ -180,7 +188,12 @@ int main() {
 			ss >> word;
 			int depth_search = stoi(word);
 
-			test_net(threads, games, depth_start, depth_search, type, n);
+			if (end != 0) {
+				test_batch(dir, end, threads, games, depth_start, depth_search);
+			}
+			else {
+				test_net(threads, games, depth_start, depth_search, type, n);
+			}
 			if (n != nullptr) { delete n; }
 		}
 

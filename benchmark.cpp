@@ -494,6 +494,7 @@ void test_thread_(int type, int games, int depth_start, int depth_search,
 		if (score1 + score2 == 0) { res[1]++; }
 		else if (score1 + score2 > 0) { res[0]++; }
 		else { res[2]++; }
+		board1.set(startpos_fen);
 	}
 
 	res[0] += win;
@@ -502,7 +503,7 @@ void test_thread_(int type, int games, int depth_start, int depth_search,
 }
 
 
-void test_net(int threads, int games, int depth_start, int depth_search, int type,
+double test_net(int threads, int games, int depth_start, int depth_search, int type,
 	 Net* n) 
 {
 	cout << "Testing with " << threads << " Threads, ";
@@ -545,9 +546,63 @@ void test_net(int threads, int games, int depth_start, int depth_search, int typ
 	system_clock::time_point time_now = system_clock::now();
 	time = duration_cast<milliseconds>(time_now - time_start);
 
-	double elo_diff = log10(double(games) / (0.01 + loss + double(draw) / 2) - 1) * 400;
+	double elo_diff = (win == games) ? 1000.0 :
+		(loss == games) ? -1000.0 : log10(double(games) / (0.01 + loss + double(draw) / 2) - 1) * 400;
 
 	cout << "+" << win << " =" << draw << " -" << loss
 		<< "\nelo " << int(elo_diff)
 		<< "\ntime " << time.count() << "ms" << endl;
+
+	return elo_diff;
+}
+
+void test_batch(string dir, int end, int threads, int games, int depth_start, int depth_search) {
+	Net n;
+	double elo_[32][34] = {};
+	double elo[2][32] = {};
+
+	for (int i = 0; i < end; i++) {
+		cout << "Weight: " << i << '\n';
+		string filename = dir + "/" + to_string(i) + ".bin";
+		load_weights(Threads.n, filename);
+		elo_[i][32] = test_net(threads, games, depth_start, depth_search, 0, nullptr);
+		elo_[i][33] = test_net(threads, games, depth_start, depth_search, 1, nullptr);
+		for (int opp = i + 1; opp < end; opp++) {
+			string filename2 = dir + "/" + to_string(opp) + ".bin";
+			load_weights(&n, filename2);
+			double ed = test_net(threads, games, depth_start, depth_search, 2, &n);
+			elo_[i][opp] = ed;
+			elo_[opp][i] = -ed;
+		}
+		cout << endl;
+	}
+
+	cout << "Elo: \n";
+	
+	double sum_diff = 0;
+	for (int i = 0; i < end; i++) {
+		sum_diff += elo_[i][32] - elo_[i][33];
+	}
+	sum_diff /= end;
+	for (int i = 0; i < end; i++) {
+		elo[1][i] = (elo_[i][32] + elo_[i][33] + sum_diff) / 2;
+	}
+
+	int idx_curr = 0;
+	for (int it = 0; it < 16; it++) {
+		for (int i = 0; i < end; i++) {
+			elo[idx_curr][i] = 0;
+			for (int j = 0; j < end; j++) {
+				elo[idx_curr][i] += elo[idx_curr ^ 1][j] + elo_[i][j];
+			}
+			elo[idx_curr][i] /= end;
+		}
+		idx_curr ^= 1;
+	}
+
+	cout << "r 0\ng " << sum_diff << '\n';
+	for (int i = 0; i < end; i++) {
+		cout << 'w' << i << ' ' << elo[idx_curr ^ 1][i] + sum_diff << '\n';
+	}
+	cout << endl;
 }
