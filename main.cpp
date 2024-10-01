@@ -157,19 +157,9 @@ int main() {
 				cycle++;
 			}
 
-			if (cycle > 1) {
-				thread t = thread(do_learning_cycle, Threads.n, Threads.n,
-					games_, threads, find_depth, rand_depth, lr, cycle);
-				t.detach();
-			}
-			else {
-				uint64_t time_curr = 0;
-				uint64_t game_curr = 0;
-				thread t = thread(do_learning,
-					Threads.n, Threads.n, &time_curr, &game_curr,
-					games_[0], threads, find_depth[0], rand_depth[0], lr[0]);
-				t.detach();
-			}
+			thread t = thread(do_learning_cycle, Threads.n, Threads.n,
+				games_, threads, find_depth, rand_depth, lr, cycle);
+			t.detach();
 
 		}
 

@@ -1,7 +1,7 @@
 #include "tune.h"
 
 constexpr int LOSS_SMOOTH = (1 << 12);
-constexpr int THREAD_LOOP = 16;
+constexpr int THREAD_LOOP = 1;
 constexpr int SOLVE_DEPTH = 9;
 
 constexpr int AUTOSAVE_S = 1200;
@@ -304,31 +304,32 @@ int _play_rand(Position* board, PRNG* rng_)
 struct PBS {
 	Net_train* dst_;
 	atomic<double>* loss_curr;
-	atomic<double>* loss_base;
 	double lr;
 	PRNG* r;
 };
 
-int _play_best(Position* board, int find_depth, PBS* p)
+int _play_best(Position* board1, Position* board2, int find_depth, bool side, PBS* p)
 {
 	MoveList legal_moves;
-	legal_moves.generate(*board);
+	legal_moves.generate(*board1);
 	int score_true;
 
-	if (board->get_count(EMPTY) < SOLVE_DEPTH) { find_depth = SOLVE_DEPTH; }
+	if (board1->get_count(EMPTY) < SOLVE_DEPTH) { find_depth = SOLVE_DEPTH; }
 
 	if (legal_moves.list == legal_moves.end) {
-		if (board->get_passed()) { 
+		if (board1->get_passed()) { 
 			// WDL training
-			score_true = get_material_eval(*board);
+			score_true = get_material_eval(*board1);
 			score_true = score_true > 0 ? EVAL_ALL :
 				score_true < 0 ? EVAL_NONE : 0;
 			return score_true;
 		}
-		Undo u;
-		board->do_null_move(&u);
-		score_true = -_play_best(board, find_depth, p);
-		board->undo_null_move();
+		Undo u1, u2;
+		board1->do_null_move(&u1);
+		board2->do_null_move(&u2);
+		score_true = -_play_best(board1, board2, find_depth, !side, p);
+		board1->undo_null_move();
+		board2->undo_null_move();
 	}
 
 	else {
@@ -336,42 +337,39 @@ int _play_best(Position* board, int find_depth, PBS* p)
 		Square nmove = NULL_MOVE;
 		int comp_eval;
 		int new_eval = EVAL_INIT;
+		Position* currboard = side ? board1 : board2;
 
 		for (int i = 0; i < legal_moves.length(); i++) {
 			s = legal_moves.list[i];
 			Undo u;
-			board->do_move(s, &u);
-			comp_eval = -find_best(*board, find_depth,
+			currboard->do_move(s, &u);
+			comp_eval = -find_best(*currboard, find_depth,
 				EVAL_MIN, -new_eval);
 
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
 				nmove = s;
 			}
-			board->undo_move();
+			currboard->undo_move();
 		}
 
-		Undo u;
-		board->do_move(nmove, &u);
-		score_true = -_play_best(board, find_depth, p);
-		board->undo_move();
+		Undo u1, u2;
+		board1->do_move(nmove, &u1);
+		board2->do_move(nmove, &u2);
+		score_true = -_play_best(board1, board2, find_depth, !side, p);
+		board1->undo_move();
+		board2->undo_move();
 	}
 
-	backpropagate(p->dst_, board,
+	backpropagate(p->dst_, board1,
 		score_true, 
 		p->loss_curr, p->lr);
-
-	int score_base = get_material(*board);
-	score_base = score_base > 0 ? EVAL_ALL :
-		score_base < 0 ? EVAL_NONE : 0;
-	*(p->loss_base) = double(score_true - score_base) * (score_true - score_base)
-		+ *(p->loss_base) * (LOSS_SMOOTH - 1) / LOSS_SMOOTH;
 
 	return score_true;
 }
 
 void _do_learning_thread(Net_train* src,
-	Position* board, atomic<bool>* stop, 
+	Position* board, Net* pool, int* wdl, atomic<bool>* stop, 
 	atomic<double>* loss, atomic<uint64_t>* games,
 	int find_depth, int rand_depth, double lr, PRNG* p) 
 {
@@ -379,27 +377,42 @@ void _do_learning_thread(Net_train* src,
 	Net_train dst_;
 	board->set_net(&tmp);
 
-	atomic<double>* loss_base = loss + 32;
+	Position* board2[POOL_SIZE];
+	for (int i = 0; i < POOL_SIZE; i++) {
+		board2[i] = new Position(pool + i);
+	}
 
 	while (!(*stop)) {
 		convert_to_int(&tmp, src);
 		memset(&dst_, 0, sizeof(Net_train));
 
 		for (int rep = 0; rep < THREAD_LOOP; rep++) {
-			board->set(startpos_fen);
-			int depth = 0;
+			for (int bidx = 0; bidx < POOL_SIZE; bidx++) {
 
-			while ((depth < rand_depth) &&
-				_play_rand(board, p) > 0) {
-				depth++;
+				board->set(startpos_fen);
+				int depth = 0;
+
+				while ((depth < rand_depth) &&
+					_play_rand(board, p) > 0) {
+					depth++;
+				}
+				board->set_squares();
+				board->set_accumulator();
+				*board2[bidx] = *board;
+				board2[bidx]->set_accumulator();
+
+				PBS pb = { &dst_, loss, lr, p };
+				int score1 =  _play_best(board, board2[bidx], find_depth, true, &pb);
+				(*games)++;
+				int score2 = -_play_best(board, board2[bidx], find_depth, false, &pb);
+				(*games)++;
+
+				int* win = wdl + 2 * bidx;
+				int* draw = win + 1;
+
+				if (score1 + score2  > 0) { (*win)++; }
+				if (score1 + score2 == 0) { (*draw)++; }
 			}
-			board->set_squares();
-			board->set_accumulator();
-
-			PBS pb = { &dst_, loss, loss_base, lr, p };
-			_play_best(board, find_depth, &pb);
-			
-			(*games)++;
 		}
 
 		add_float(src, &dst_);
@@ -407,7 +420,8 @@ void _do_learning_thread(Net_train* src,
 
 }
 
-void do_learning(Net* dst, Net* src, uint64_t* time_curr, uint64_t* game_curr, uint64_t games,
+void do_learning(Net* dst, Net* src, Net* pool, int* pool_wdl,
+	uint64_t* time_curr, uint64_t* game_curr, uint64_t games,
 	int threads, int find_depth, int rand_depth, double lr) {
 
 	PRNG rng_0(3245356235923498ULL);
@@ -415,13 +429,13 @@ void do_learning(Net* dst, Net* src, uint64_t* time_curr, uint64_t* game_curr, u
 	Net_train curr;
 	convert_to_float(&curr, src);
 
-	atomic<double> loss[64];
+	atomic<double> loss[THREADS_MAX];
 	atomic<uint64_t> games_(0);
-	thread thread_[64];
-	Position* boards[64];
+	thread thread_[THREADS_MAX];
+	Position* boards[THREADS_MAX];
 	int save_next = AUTOSAVE_S;
 
-	double loss_, loss_base_;
+	double loss_;
 
 	using namespace std::chrono;
 
@@ -436,7 +450,7 @@ void do_learning(Net* dst, Net* src, uint64_t* time_curr, uint64_t* game_curr, u
 		
 		thread_[i] = thread(
 			_do_learning_thread,
-			&curr, boards[i], &(Threads.stop),
+			&curr, boards[i], pool, pool_wdl + POOL_SIZE * 2 * i, & (Threads.stop),
 			loss + i, &games_, find_depth, rand_depth,
 			lr, n
 		);
@@ -455,13 +469,10 @@ void do_learning(Net* dst, Net* src, uint64_t* time_curr, uint64_t* game_curr, u
 	while (!(Threads.stop)) {
 		std::this_thread::sleep_for(milliseconds(3000));
 		loss_ = 0.0;
-		loss_base_ = 0.0;
 		for (int i = 0; i < threads; i++) {
 			loss_ += loss[i];
-			loss_base_ += loss[i + 32];
 		}
 		loss_ /= threads;
-		loss_base_ /= threads;
 
 		system_clock::time_point time_now = system_clock::now();
 		time = duration_cast<milliseconds>(time_now - time_start);
@@ -469,12 +480,10 @@ void do_learning(Net* dst, Net* src, uint64_t* time_curr, uint64_t* game_curr, u
 		double pos_ = (games_ / threads) * (61 - rand_depth);
 		double div_by = (1.0 - pow(double(LOSS_SMOOTH - 1) / LOSS_SMOOTH, pos_)) * LOSS_SMOOTH;
 		double accuracy = 100.0 - sqrt(loss_ / div_by) * 50 / EVAL_ALL;
-		double accuracy_base = 100.0 - sqrt(loss_base_ / div_by) * 50 / EVAL_ALL;
 		std::cout
 			<< "Time: " << std::setw(7) << *time_curr + time.count() / 1000 << "s // "
 			<< "Games: " << std::setw(7) << std::fixed << float((games_ + *game_curr) / 1000) / 1000 << "M // "
 			<< "Acc: " << std::setw(5) << accuracy << "% // "
-			<< "Acc_Baseline: " << std::setw(5) << accuracy_base << "% // "
 			<< "Loss: " << std::scientific << loss_
 			<< std::endl;
 
@@ -505,13 +514,50 @@ void do_learning_cycle(Net* dst, Net* src, uint64_t* game_switch,
 	int count = 0;
 	uint64_t game_curr = 0;
 	uint64_t time_curr = 0;
+
+	Net pool[POOL_SIZE];
+	int pool_wdl[THREADS_MAX * POOL_SIZE * 2];
+
+	cout << "Initializing Pool...\n";
+	for (int i = 0; i < POOL_SIZE; i++) {
+		memcpy(pool + i, src, sizeof(Net));
+		rand_weights(pool + i, 1);
+	}
+
 	while (true) {
+		cout << "Playing Pool... ";
+		memset(pool_wdl, 0, sizeof(pool_wdl));
+
 		for (int i = 0; i < cycles; i++) {
-			do_learning(dst, src, &time_curr, &game_curr, game_switch[i],
+			do_learning(dst, src, pool, pool_wdl,
+				&time_curr, &game_curr, game_switch[i],
 				threads, find_depth[i], rand_depth[i], lr[i]);
 		}
+
 		save_weights(dst, "ep" + to_string(count)
 			+ "-" + to_string(game_curr / 1000) + "K.bin");
+
+		cout << "Updating Pool... ";
+		for (int i = 1; i < threads; i++) {
+			for (int j = 0; j < POOL_SIZE; j++) {
+				pool_wdl[2 * j + 0] += pool_wdl[2 * POOL_SIZE * i + 2 * j + 0];
+				pool_wdl[2 * j + 1] += pool_wdl[2 * POOL_SIZE * i + 2 * j + 1];
+			}
+		}
+
+		int least_score = -1;
+		int least_idx = 0;
+		for (int i = 0; i < POOL_SIZE; i++) {
+			int curr_score = 2 * pool_wdl[i * 2 + 0] + pool_wdl[i * 2 + 1];
+			if (curr_score > least_score) {
+				least_score = curr_score;
+				least_idx = i;
+			}
+		}
+
+		memcpy(pool + least_idx, dst, sizeof(Net));
+		cout << least_idx << endl;
+
 		count++;
 	}
 }

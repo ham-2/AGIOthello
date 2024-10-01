@@ -4,7 +4,7 @@ using namespace std;
 
 void print_option() {
 	Threads.acquire_cout();
-	cout << "option name Threads type spin default 1 min 1 max " << SEARCH_THREADS_MAX << '\n'
+	cout << "option name Threads type spin default 1 min 1 max " << THREADS_MAX << '\n'
 		<< "option name Hash type spin default 1 min 1 max 64 \n"
 		<< "option name Stopifmate type check default false\n"
 		<< endl;

@@ -71,7 +71,7 @@ void Threadmgr::del_thread() {
 
 void Threadmgr::set_threads(int new_threads) {
 	if (new_threads < 1) { new_threads = 1; }
-	else if (new_threads > SEARCH_THREADS_MAX) { new_threads = SEARCH_THREADS_MAX; }
+	else if (new_threads > THREADS_MAX) { new_threads = THREADS_MAX; }
 
 	if (new_threads > num_threads) {
 		while (new_threads != num_threads) {

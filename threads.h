@@ -15,7 +15,7 @@
 
 using namespace std;
 
-constexpr int SEARCH_THREADS_MAX = 16;
+constexpr int THREADS_MAX = 32;
 
 class Thread {
 public:
