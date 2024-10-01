@@ -105,8 +105,9 @@ int main() {
 		// Weight
 
 		else if (word == "load") {
-			Threads.acquire_lock();
 			ss >> word;
+			word = std::filesystem::current_path().string() + word;
+			Threads.acquire_lock();
 			load_weights(Threads.n, word);
 			Threads.set_weights();
 			Threads.release_lock();
@@ -114,6 +115,7 @@ int main() {
 
 		else if (word == "save") {
 			ss >> word;
+			word = std::filesystem::current_path().string() + word;
 			save_weights(Threads.n, word);
 		}
 
@@ -129,32 +131,52 @@ int main() {
 		}
 
 		else if (word == "tune") {
+			int cycle = 0;
+			int find_depth[32] = { };
+			int rand_depth[32] = { };
+			uint64_t games_[32] = { };
+			double lr[32] = { };
+
 			ss >> word;
 			int threads = stoi(word);
 
-			ss >> word;
-			int64_t games = stoll(word);
+			cout << "\nLearning with: " << threads << " Threads\n" << endl;
 
-			ss >> word;
-			int find_depth = stoi(word);
+			while (ss >> word) {
+				find_depth[cycle] = stoi(word);
 
-			ss >> word;
-			int rand_depth = stoi(word);
+				ss >> word;
+				rand_depth[cycle] = stoi(word);
 
-			ss >> word;
-			double lr = stod(word);
+				ss >> word;
+				games_[cycle] = int64_t(stoi(word)) * 1000;
 
-			thread t = thread(do_learning,
-				Threads.n, Threads.n,
-				games, threads, find_depth, rand_depth, lr);
-			t.detach();
+				ss >> word;
+				lr[cycle] = stod(word);
+
+				cycle++;
+			}
+
+			if (cycle > 1) {
+				thread t = thread(do_learning_cycle, Threads.n, Threads.n,
+					games_, threads, find_depth, rand_depth, lr, cycle);
+				t.detach();
+			}
+			else {
+				uint64_t time_curr = 0;
+				uint64_t game_curr = 0;
+				thread t = thread(do_learning,
+					Threads.n, Threads.n, &time_curr, &game_curr,
+					games_[0], threads, find_depth[0], rand_depth[0], lr[0]);
+				t.detach();
+			}
+
 		}
 
 		else if (word == "testnet") {
 			Net* n = nullptr;
 			int type;
 			string dir;
-			int end = 0;
 
 			ss >> word;
 			if (word[1] == 'n') {
@@ -172,8 +194,7 @@ int main() {
 			else if (word[1] == 'b') {
 				ss >> word;
 				dir = word;
-				ss >> word;
-				end = stoi(word);
+				type = 3;
 			}
 
 			ss >> word;
@@ -188,8 +209,8 @@ int main() {
 			ss >> word;
 			int depth_search = stoi(word);
 
-			if (end != 0) {
-				test_batch(dir, end, threads, games, depth_start, depth_search);
+			if (type == 3) {
+				test_batch(dir, threads, games, depth_start, depth_search);
 			}
 			else {
 				test_net(threads, games, depth_start, depth_search, type, n);

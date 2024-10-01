@@ -4,8 +4,6 @@
 
 int load_weights(Net* net, std::string filename)
 {
-	char filename_buf[256];
-	filename = getcwd_wrap(filename_buf, 256) + filename;
 
 	std::cout << "Loading weights from \"" << filename << "\"\n";
 	std::ifstream input(filename, std::ios::binary);
@@ -26,8 +24,6 @@ int load_weights(Net* net, std::string filename)
 
 void save_weights(Net* net, std::string filename)
 {
-	char filename_buf[256];
-	filename = getcwd_wrap(filename_buf, 256) + filename;
 
 	std::cout << "Saving weights to \"" << filename << "\"\n";
 	std::ofstream output(filename, std::ios::binary);

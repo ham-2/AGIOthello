@@ -6,19 +6,6 @@
 #include <iostream>
 #include <string>
 
-#ifdef _WIN64
-#include <direct.h>
-inline std::string getcwd_wrap(char* dst, int bytes) { 
-	_getcwd(dst, bytes);
-	return std::string(dst) + "\\";
-}
-#else
-#include <unistd.h>
-inline std::string getcwd_wrap(char* dst, int bytes) { 
-	getcwd(dst, bytes);
-	return std::string(dst) + "/";
-}
-#endif
 
 #include "board.h"
 #include "misc.h"
@@ -29,9 +16,9 @@ constexpr int SIZE_F2 = 64;
 constexpr int SIZE_F3 = 64;
 constexpr int SIZE_OUT = 2;
 
-constexpr int SHIFT_L1 = 2;
-constexpr int SHIFT_L2 = 7;
-constexpr int SHIFT_L3 = 7;
+constexpr int SHIFT_L1 = 4;
+constexpr int SHIFT_L2 = 6;
+constexpr int SHIFT_L3 = 6;
 
 constexpr int MAX_L1 = 127;
 constexpr int MAX_L2 = 127;

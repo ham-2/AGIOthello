@@ -407,7 +407,7 @@ void _do_learning_thread(Net_train* src,
 
 }
 
-void do_learning(Net* dst, Net* src, uint64_t games,
+void do_learning(Net* dst, Net* src, uint64_t* time_curr, uint64_t* game_curr, uint64_t games,
 	int threads, int find_depth, int rand_depth, double lr) {
 
 	PRNG rng_0(3245356235923498ULL);
@@ -444,15 +444,15 @@ void do_learning(Net* dst, Net* src, uint64_t games,
 
 	std::cout << std::setprecision(1);
 
-	std::cout
-		<< "Learning with: " << threads << " Threads\n"
+	std::cout << '\n'
 		<< "Learning rate: " << std::scientific << lr << '\n'
-		<< "Max Games: " << games << '\n' 
+		<< "NGames: " << games << '\n'
+		<< "From: " << rand_depth << '\n'
 		<< "Depth: " << find_depth << '\n' << std::endl;
 
 	std::cout << std::setprecision(2);
 
-	while (!(Threads.stop) && (games_ < games)) {
+	while (!(Threads.stop)) {
 		std::this_thread::sleep_for(milliseconds(3000));
 		loss_ = 0.0;
 		loss_base_ = 0.0;
@@ -466,21 +466,25 @@ void do_learning(Net* dst, Net* src, uint64_t games,
 		system_clock::time_point time_now = system_clock::now();
 		time = duration_cast<milliseconds>(time_now - time_start);
 
-		double accuracy = 100 - sqrt(loss_ / LOSS_SMOOTH) * 50 / EVAL_ALL;
+		double pos_ = (games_ / threads) * (61 - rand_depth);
+		double div_by = (1.0 - pow(double(LOSS_SMOOTH - 1) / LOSS_SMOOTH, pos_)) * LOSS_SMOOTH;
+		double accuracy = 100.0 - sqrt(loss_ / div_by) * 50 / EVAL_ALL;
+		double accuracy_base = 100.0 - sqrt(loss_base_ / div_by) * 50 / EVAL_ALL;
 		std::cout
-			<< "Time: " << std::setw(7) << time.count() / 1000 << "s // "
-			<< "Games: " << std::setw(7) << std::fixed << float(games_ / 1000) / 1000 << "M // "
+			<< "Time: " << std::setw(7) << *time_curr + time.count() / 1000 << "s // "
+			<< "Games: " << std::setw(7) << std::fixed << float((games_ + *game_curr) / 1000) / 1000 << "M // "
 			<< "Acc: " << std::setw(5) << accuracy << "% // "
-			<< "Acc_Baseline: " << std::setw(5) << 100 - sqrt(loss_base_ / LOSS_SMOOTH) * 50 / EVAL_ALL << "% // "
+			<< "Acc_Baseline: " << std::setw(5) << accuracy_base << "% // "
 			<< "Loss: " << std::scientific << loss_
 			<< std::endl;
 
 		if (time.count() / 1000 > save_next) {
 			convert_to_int(dst, &curr);
-			save_weights(dst, "temp-" + to_string(time.count() / 1000) 
-				+ "-acc" + to_string(int(accuracy)) + ".bin");
+			save_weights(dst, "temp-" + to_string((*game_curr) / 1000) + "K.bin");
 			save_next += AUTOSAVE_S;
 		}
+
+		if (games_ > games) { Threads.stop = true; break; }
 	}
 
 	for (int i = 0; i < threads; i++) {
@@ -488,6 +492,26 @@ void do_learning(Net* dst, Net* src, uint64_t games,
 		delete boards[i];
 	}
 
+	*time_curr += time.count() / 1000;
+	*game_curr += games_;
+
 	convert_to_int(dst, &curr);
 	save_weights(dst, "temp.bin");
+}
+
+void do_learning_cycle(Net* dst, Net* src, uint64_t* game_switch,
+	int threads, int* find_depth, int* rand_depth, double* lr, int cycles)
+{
+	int count = 0;
+	uint64_t game_curr = 0;
+	uint64_t time_curr = 0;
+	while (true) {
+		for (int i = 0; i < cycles; i++) {
+			do_learning(dst, src, &time_curr, &game_curr, game_switch[i],
+				threads, find_depth[i], rand_depth[i], lr[i]);
+		}
+		save_weights(dst, "ep" + to_string(count)
+			+ "-" + to_string(game_curr / 1000) + "K.bin");
+		count++;
+	}
 }

@@ -214,12 +214,12 @@ void net_verify() {
 int find_best(Position& board, int depth,
 	int alpha, int beta) {
 	if (depth < 1) { return eval(board); }
-	
+
 	MoveList legal_moves;
 	legal_moves.generate(board);
 
 	if (legal_moves.list == legal_moves.end) {
-		if (board.get_passed()) { 
+		if (board.get_passed()) {
 			return get_material_eval(board);
 		}
 
@@ -231,7 +231,7 @@ int find_best(Position& board, int depth,
 			return after_pass;
 		}
 	}
-	
+
 	Square s;
 	Square nmove = NULL_MOVE;
 	int comp_eval;
@@ -244,7 +244,7 @@ int find_best(Position& board, int depth,
 		board.do_move(s, &u);
 		comp_eval = -find_best(board, depth - 1, -beta, -alpha);
 		board.undo_move();
-		
+
 		if (comp_eval > new_eval) {
 			new_eval = comp_eval;
 			nmove = s;
@@ -315,7 +315,7 @@ int play_r(Position& board1, int sd, bool rand) {
 		Square nmove = NULL_MOVE;
 		int comp_eval;
 		int new_eval = EVAL_INIT;
-		
+
 		if (rand) {
 			nmove = legal_moves.list[rng.get() % legal_moves.length()];
 		}
@@ -546,8 +546,10 @@ double test_net(int threads, int games, int depth_start, int depth_search, int t
 	system_clock::time_point time_now = system_clock::now();
 	time = duration_cast<milliseconds>(time_now - time_start);
 
-	double elo_diff = (win == games) ? 1000.0 :
-		(loss == games) ? -1000.0 : log10(double(games) / (0.01 + loss + double(draw) / 2) - 1) * 400;
+	double elo_max = log10(double(2 * games) - 1) * 400;
+
+	double elo_diff = (win == games) ? elo_max :
+		(loss == games) ? -elo_max : log10(double(games) / (0.01 + loss + double(draw) / 2) - 1) * 400;
 
 	cout << "+" << win << " =" << draw << " -" << loss
 		<< "\nelo " << int(elo_diff)
@@ -556,20 +558,27 @@ double test_net(int threads, int games, int depth_start, int depth_search, int t
 	return elo_diff;
 }
 
-void test_batch(string dir, int end, int threads, int games, int depth_start, int depth_search) {
+void test_batch(string dir, int threads, int games, int depth_start, int depth_search) {
 	Net n;
+	string name[32];
 	double elo_[32][34] = {};
 	double elo[2][32] = {};
 
+	int end = 0;
+	dir = filesystem::current_path().string() + dir;
+	for (const auto& entry : filesystem::directory_iterator(dir)) {
+		if (entry.path().extension() != ".bin") { continue; }
+		name[end] = entry.path().string();
+		if (end++ >= 32) { break; }
+	}
+	
 	for (int i = 0; i < end; i++) {
-		cout << "Weight: " << i << '\n';
-		string filename = dir + "/" + to_string(i) + ".bin";
-		load_weights(Threads.n, filename);
+		cout << "Weight: " << name[i] << '\n';
+		load_weights(Threads.n, name[i]);
 		elo_[i][32] = test_net(threads, games, depth_start, depth_search, 0, nullptr);
 		elo_[i][33] = test_net(threads, games, depth_start, depth_search, 1, nullptr);
 		for (int opp = i + 1; opp < end; opp++) {
-			string filename2 = dir + "/" + to_string(opp) + ".bin";
-			load_weights(&n, filename2);
+			load_weights(&n, name[opp]);
 			double ed = test_net(threads, games, depth_start, depth_search, 2, &n);
 			elo_[i][opp] = ed;
 			elo_[opp][i] = -ed;
@@ -602,7 +611,7 @@ void test_batch(string dir, int end, int threads, int games, int depth_start, in
 
 	cout << "r 0\ng " << sum_diff << '\n';
 	for (int i = 0; i < end; i++) {
-		cout << 'w' << i << ' ' << elo[idx_curr ^ 1][i] + sum_diff << '\n';
+		cout << filesystem::path(name[i]).filename() << ' ' << elo[idx_curr ^ 1][i] + sum_diff << '\n';
 	}
 	cout << endl;
 }
