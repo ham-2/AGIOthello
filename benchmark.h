@@ -20,7 +20,9 @@ void solve();
 
 // Evaluation Benchmarks
 void net_speedtest();
-void net_verify();
+void test_thread(Net* n1, Net* n2,
+	int type, int games, int depth_start, int depth_search,
+	int* res);
 double test_net(int threads, int games, int depth_start, int depth_search, int type, Net* n);
 void test_batch(string dir, int threads, int games, int depth_start, int depth_search);
 

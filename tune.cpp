@@ -1,39 +1,26 @@
 #include "tune.h"
 
 constexpr int LOSS_SMOOTH = (1 << 12);
-constexpr int THREAD_LOOP = 1;
+constexpr int THREAD_LOOP = 8;
 constexpr int SOLVE_DEPTH = 9;
 
-constexpr int AUTOSAVE_S = 1200;
+template <typename T1, typename T2, int size> 
+inline void convert_(T1* dst, T2* src) {
+	for (int i = 0; i < size; i++) { dst[i] = src[i]; }
+}
 
 void convert_to_float(Net_train* dst, Net* src) 
 {
 	dst->m.lock();
 
-	for (int i = 0; i < SIZE_F0 * SIZE_F1; i++) {
-		dst->L0_a[i] = src->L0_a[i];
-	}
-	for (int i = 0; i < SIZE_F1; i++) {
-		dst->L0_b[i] = src->L0_b[i];
-	}
-	for (int i = 0; i < SIZE_F1 * SIZE_F2; i++) {
-		dst->L1_a[i] = src->L1_a[i];
-	}
-	for (int i = 0; i < SIZE_F2; i++) {
-		dst->L1_b[i] = src->L1_b[i];
-	}
-	for (int i = 0; i < SIZE_F2 * SIZE_F3; i++) {
-		dst->L2_a[i] = src->L2_a[i];
-	}
-	for (int i = 0; i < SIZE_F3; i++) {
-		dst->L2_b[i] = src->L2_b[i];
-	}
-	for (int i = 0; i < SIZE_F3 * SIZE_OUT; i++) {
-		dst->L3_a[i] = src->L3_a[i];
-	}
-	for (int i = 0; i < SIZE_OUT; i++) {
-		dst->L3_b[i] = src->L3_b[i];
-	}
+	convert_<float, int8_t, SIZE_F0 * SIZE_F1>(dst->L0_a, src->L0_a);
+	convert_<float, int16_t, SIZE_F1>(dst->L0_b, src->L0_b);
+	convert_<float, int8_t, SIZE_F1 * SIZE_F2>(dst->L1_a, src->L1_a);
+	convert_<float, int16_t, SIZE_F2>(dst->L1_b, src->L1_b);
+	convert_<float, int8_t, SIZE_F2 * SIZE_F3>(dst->L2_a, src->L2_a);
+	convert_<float, int16_t, SIZE_F3>(dst->L2_b, src->L2_b);
+	convert_<float, int16_t, SIZE_F3 * SIZE_OUT>(dst->L3_a, src->L3_a);
+	convert_<float, int32_t, SIZE_OUT>(dst->L3_b, src->L3_b);
 
 	dst->m.unlock();
 }
@@ -42,32 +29,43 @@ void convert_to_int(Net* dst, Net_train* src)
 {
 	src->m.lock();
 
-	for (int i = 0; i < SIZE_F0 * SIZE_F1; i++) {
-		dst->L0_a[i] = src->L0_a[i];
-	}
-	for (int i = 0; i < SIZE_F1; i++) {
-		dst->L0_b[i] = src->L0_b[i];
-	}
-	for (int i = 0; i < SIZE_F1 * SIZE_F2; i++) {
-		dst->L1_a[i] = src->L1_a[i];
-	}
-	for (int i = 0; i < SIZE_F2; i++) {
-		dst->L1_b[i] = src->L1_b[i];
-	}
-	for (int i = 0; i < SIZE_F2 * SIZE_F3; i++) {
-		dst->L2_a[i] = src->L2_a[i];
-	}
-	for (int i = 0; i < SIZE_F3; i++) {
-		dst->L2_b[i] = src->L2_b[i];
-	}
-	for (int i = 0; i < SIZE_F3 * SIZE_OUT; i++) {
-		dst->L3_a[i] = src->L3_a[i];
-	}
-	for (int i = 0; i < SIZE_OUT; i++) {
-		dst->L3_b[i] = src->L3_b[i];
-	}
+	convert_<int8_t, float, SIZE_F0 * SIZE_F1>(dst->L0_a, src->L0_a);
+	convert_<int16_t, float, SIZE_F1>(dst->L0_b, src->L0_b);
+	convert_<int8_t, float, SIZE_F1 * SIZE_F2>(dst->L1_a, src->L1_a);
+	convert_<int16_t, float, SIZE_F2>(dst->L1_b, src->L1_b);
+	convert_<int8_t, float, SIZE_F2 * SIZE_F3>(dst->L2_a, src->L2_a);
+	convert_<int16_t, float, SIZE_F3>(dst->L2_b, src->L2_b);
+	convert_<int16_t, float, SIZE_F3 * SIZE_OUT>(dst->L3_a, src->L3_a);
+	convert_<int32_t, float, SIZE_OUT>(dst->L3_b, src->L3_b);
 
 	src->m.unlock();
+}
+
+void copy_float(Net_train* dst, Net_train* src) {
+	src->m.lock();
+
+	memcpy(dst->L0_a, src->L0_a, sizeof(src->L0_a));
+	memcpy(dst->L0_b, src->L0_b, sizeof(src->L0_b));
+	memcpy(dst->L1_a, src->L1_a, sizeof(src->L1_a));
+	memcpy(dst->L1_b, src->L1_b, sizeof(src->L1_b));
+	memcpy(dst->L2_a, src->L2_a, sizeof(src->L2_a));
+	memcpy(dst->L2_b, src->L2_b, sizeof(src->L2_b));
+	memcpy(dst->L3_a, src->L3_a, sizeof(src->L3_a));
+	memcpy(dst->L3_b, src->L3_b, sizeof(src->L3_b));
+
+	src->m.unlock();
+}
+
+template<int size, float clip>
+inline void add_float_(float* dst, float* src) {
+	for (int i = 0; i < size; i += 8) {
+		__m256 dst_ = _mm256_load_ps(dst + i);
+		__m256 src_ = _mm256_load_ps(src + i);
+		dst_ = _mm256_add_ps(dst_, src_);
+		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-clip));
+		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(clip));
+		_mm256_store_ps(dst + i, dst_);
+	}
 }
 
 void add_float(Net_train* dst, Net_train* src) {
@@ -75,62 +73,13 @@ void add_float(Net_train* dst, Net_train* src) {
 	src->m.lock();
 	dst->m.lock();
 
-	for (int i = 0; i < SIZE_F0 * SIZE_F1; i += 8) {
-		__m256 dst_ = _mm256_load_ps(dst->L0_a + i);
-		__m256 src_ = _mm256_load_ps(src->L0_a + i);
-		dst_ = _mm256_add_ps(dst_, src_);
-		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-16383.0f));
-		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(16383.0f));
-		_mm256_store_ps(dst->L0_a + i, dst_);
-	}
-	for (int i = 0; i < SIZE_F1; i += 8) {
-		__m256 dst_ = _mm256_load_ps(dst->L0_b + i);
-		__m256 src_ = _mm256_load_ps(src->L0_b + i);
-		dst_ = _mm256_add_ps(dst_, src_);
-		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-16383.0f));
-		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(16383.0f));
-		_mm256_store_ps(dst->L0_b + i, dst_);
-	}
-	for (int i = 0; i < SIZE_F1 * SIZE_F2; i += 8) {
-		__m256 dst_ = _mm256_load_ps(dst->L1_a + i);
-		__m256 src_ = _mm256_load_ps(src->L1_a + i);
-		dst_ = _mm256_add_ps(dst_, src_);
-		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-127.0f));
-		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(127.0f));
-		_mm256_store_ps(dst->L1_a + i, dst_);
-	}
-	for (int i = 0; i < SIZE_F2; i += 8) {
-		__m256 dst_ = _mm256_load_ps(dst->L1_b + i);
-		__m256 src_ = _mm256_load_ps(src->L1_b + i);
-		dst_ = _mm256_add_ps(dst_, src_);
-		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-16383.0f));
-		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(16383.0f));
-		_mm256_store_ps(dst->L1_b + i, dst_);
-	}
-	for (int i = 0; i < SIZE_F2 * SIZE_F3; i += 8) {
-		__m256 dst_ = _mm256_load_ps(dst->L2_a + i);
-		__m256 src_ = _mm256_load_ps(src->L2_a + i);
-		dst_ = _mm256_add_ps(dst_, src_);
-		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-127.0f));
-		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(127.0f));
-		_mm256_store_ps(dst->L2_a + i, dst_);
-	}
-	for (int i = 0; i < SIZE_F3; i += 8) {
-		__m256 dst_ = _mm256_load_ps(dst->L2_b + i);
-		__m256 src_ = _mm256_load_ps(src->L2_b + i);
-		dst_ = _mm256_add_ps(dst_, src_);
-		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-16383.0f));
-		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(16383.0f));
-		_mm256_store_ps(dst->L2_b + i, dst_);
-	}
-	for (int i = 0; i < SIZE_F3 * SIZE_OUT; i += 8) {
-		__m256 dst_ = _mm256_load_ps(dst->L3_a + i);
-		__m256 src_ = _mm256_load_ps(src->L3_a + i);
-		dst_ = _mm256_add_ps(dst_, src_);
-		dst_ = _mm256_max_ps(dst_, _mm256_set1_ps(-32767.0f));
-		dst_ = _mm256_min_ps(dst_, _mm256_set1_ps(32767.0f));
-		_mm256_store_ps(dst->L3_a + i, dst_);
-	}
+	add_float_<SIZE_F0 * SIZE_F1, 127.0f>(dst->L0_a, src->L0_a);
+	add_float_<SIZE_F1, 16383.0f>(dst->L0_b, src->L0_b);
+	add_float_<SIZE_F1 * SIZE_F2, 127.0f>(dst->L1_a, src->L1_a);
+	add_float_<SIZE_F2, 16383.0f>(dst->L1_b, src->L1_b);
+	add_float_<SIZE_F2 * SIZE_F3, 127.0f>(dst->L2_a, src->L2_a);
+	add_float_<SIZE_F3, 16383.0f>(dst->L2_b, src->L2_b);
+	add_float_<SIZE_F3 * SIZE_OUT, 32767.0f>(dst->L3_a, src->L3_a);
 	for (int i = 0; i < SIZE_OUT; i++) {
 		dst->L3_b[i] += src->L3_b[i];
 	}
@@ -144,7 +93,7 @@ void back_b_(__m256 c, float* d_3, float* d_2,
 	int16_t* p2r, int8_t* a_2, float* b_1) {
 
 	for (int i = 0; i < size_2; i++) {
-		if (p2r[i] > (max_2 << shift_2) || p2r[i] < 0) { 
+		if (p2r[i] > (max_2 << shift_2) || p2r[i] < 0) {
 			d_2[i] = 0;
 			continue;
 		}
@@ -155,7 +104,7 @@ void back_b_(__m256 c, float* d_3, float* d_2,
 			__m256 d_3_ = _mm256_load_ps(d_3 + j);
 			__m256 a_2_ = _mm256_cvtepi32_ps(
 				_mm256_cvtepi8_epi32(
-				_mm_load_si128((__m128i*)(a_2 + j + i * size_3))));
+					_mm_load_si128((__m128i*)(a_2 + j + i * size_3))));
 			d_2_ = _mm256_add_ps(d_2_, _mm256_mul_ps(d_3_, a_2_));
 		}
 		d_2_ = _mm256_hadd_ps(d_2_, _mm256_setzero_ps());
@@ -209,7 +158,7 @@ void backpropagate(Net_train* dst, Position* board,
 	float dPdP2R[SIZE_F2];
 	float dPdP1R[SIZE_F1];
 
-	int16_t *acc = board->get_accumulator() + (board->get_side() ? SIZE_F1 : 0);
+	int16_t* acc = board->get_accumulator() + (board->get_side() ? SIZE_F1 : 0);
 	Net* n = board->get_net();
 
 	ReLUClip<SIZE_F1, SHIFT_L1, MAX_L1>(P1, acc);
@@ -258,7 +207,7 @@ void backpropagate(Net_train* dst, Position* board,
 	Piece us = board->get_side() ? WHITE_P : BLACK_P;
 
 	for (Square s = A1; s < SQ_END; ++s) {
-		if (board->get_piece(s) == EMPTY) {	continue; }
+		if (board->get_piece(s) == EMPTY) { continue; }
 
 		int addr = board->get_piece(s) == us ?
 			s * SIZE_F1 : s * SIZE_F1 + L0_OFFSET;
@@ -302,7 +251,10 @@ int _play_rand(Position* board, PRNG* rng_)
 }
 
 struct PBS {
-	Net_train* dst_;
+	Net_train* dst1_;
+	Net_train* dst2_;
+	Net_train* src1_;
+	Net_train* src2_;
 	atomic<double>* loss_curr;
 	double lr;
 	PRNG* r;
@@ -318,18 +270,23 @@ int _play_best(Position* board1, Position* board2, int find_depth, bool side, PB
 
 	if (legal_moves.list == legal_moves.end) {
 		if (board1->get_passed()) { 
-			// WDL training
-			score_true = get_material_eval(*board1);
+			score_true = get_material(*board1);
 			score_true = score_true > 0 ? EVAL_ALL :
 				score_true < 0 ? EVAL_NONE : 0;
 			return score_true;
 		}
+		
 		Undo u1, u2;
 		board1->do_null_move(&u1);
-		board2->do_null_move(&u2);
-		score_true = -_play_best(board1, board2, find_depth, !side, p);
+		if (board1 == board2) {
+			score_true = -_play_best(board1, board2, find_depth, !side, p);
+		}
+		else {
+			board2->do_null_move(&u2);
+			score_true = -_play_best(board1, board2, find_depth, !side, p);
+			board2->undo_null_move();
+		}
 		board1->undo_null_move();
-		board2->undo_null_move();
 	}
 
 	else {
@@ -355,85 +312,101 @@ int _play_best(Position* board1, Position* board2, int find_depth, bool side, PB
 
 		Undo u1, u2;
 		board1->do_move(nmove, &u1);
-		board2->do_move(nmove, &u2);
-		score_true = -_play_best(board1, board2, find_depth, !side, p);
+		if (board1 == board2) {
+			score_true = -_play_best(board1, board2, find_depth, !side, p);
+		}
+		else {
+			board2->do_move(nmove, &u2);
+			score_true = -_play_best(board1, board2, find_depth, !side, p);
+			board2->undo_move();
+		}
 		board1->undo_move();
-		board2->undo_move();
 	}
 
-	backpropagate(p->dst_, board1,
-		score_true, 
+	backpropagate(p->dst1_, board1,
+		score_true,
 		p->loss_curr, p->lr);
+
+	if (board1 != board2) {
+		backpropagate(p->dst2_, board1,
+			score_true,
+			p->loss_curr, p->lr);
+	}
 
 	return score_true;
 }
 
 void _do_learning_thread(Net_train* src,
-	Position* board, Net* pool, int* wdl, atomic<bool>* stop, 
-	atomic<double>* loss, atomic<uint64_t>* games,
+	atomic<bool>* stop, atomic<double>* loss, atomic<uint64_t>* games,
 	int find_depth, int rand_depth, double lr, PRNG* p) 
 {
-	Net tmp;
-	Net_train dst_;
-	board->set_net(&tmp);
+	Net* tmp[POOL_SIZE];
+	Net_train* src_[POOL_SIZE];
+	Net_train* dst_[POOL_SIZE];
 
-	Position* board2[POOL_SIZE];
+	Position* board[POOL_SIZE];
 	for (int i = 0; i < POOL_SIZE; i++) {
-		board2[i] = new Position(pool + i);
+		tmp[i] = new Net;
+		src_[i] = new Net_train;
+		dst_[i] = new Net_train;
+		board[i] = new Position(tmp[i]);
 	}
 
 	while (!(*stop)) {
-		convert_to_int(&tmp, src);
-		memset(&dst_, 0, sizeof(Net_train));
-
+		for (int i = 0; i < POOL_SIZE; i++) {
+			copy_float(src_[i], src + i);
+			convert_to_int(tmp[i], src_[i]);
+			memset(dst_[i], 0, sizeof(Net_train));
+		}
+		
 		for (int rep = 0; rep < THREAD_LOOP; rep++) {
-			for (int bidx = 0; bidx < POOL_SIZE; bidx++) {
+			for (int b_1 = 0; b_1 < POOL_SIZE; b_1++) {
+				for (int b_2 = b_1; b_2 < POOL_SIZE; b_2++) {
+					board[b_1]->set(startpos_fen);
+					int depth = 0;
+					while ((depth < rand_depth) &&
+						_play_rand(board[b_1], p) > 0) {
+						depth++;
+					}
+					board[b_1]->set_squares();
+					board[b_1]->set_accumulator();
+					*board[b_2] = *board[b_1];
+					board[b_2]->set_accumulator();
 
-				board->set(startpos_fen);
-				int depth = 0;
-
-				while ((depth < rand_depth) &&
-					_play_rand(board, p) > 0) {
-					depth++;
+					PBS pb = { dst_[b_1], dst_[b_2],
+						src_[b_1], src_[b_2],
+						loss, lr, p };
+					_play_best(board[b_1], board[b_2], find_depth, true, &pb);
+					(*games)++;
+					if (b_1 == b_2) { continue;	}
+					_play_best(board[b_1], board[b_2], find_depth, false, &pb);
+					(*games)++;
 				}
-				board->set_squares();
-				board->set_accumulator();
-				*board2[bidx] = *board;
-				board2[bidx]->set_accumulator();
-
-				PBS pb = { &dst_, loss, lr, p };
-				int score1 =  _play_best(board, board2[bidx], find_depth, true, &pb);
-				(*games)++;
-				int score2 = -_play_best(board, board2[bidx], find_depth, false, &pb);
-				(*games)++;
-
-				int* win = wdl + 2 * bidx;
-				int* draw = win + 1;
-
-				if (score1 + score2  > 0) { (*win)++; }
-				if (score1 + score2 == 0) { (*draw)++; }
 			}
 		}
 
-		add_float(src, &dst_);
+		for (int i = 0; i < POOL_SIZE; i++) {
+			add_float(src + i, dst_[i]);
+		}
 	}
 
+	for (int i = 0; i < POOL_SIZE; i++) {
+		delete board[i];
+		delete tmp[i];
+		delete src_[i];
+		delete dst_[i];
+	}
 }
 
-void do_learning(Net* dst, Net* src, Net* pool, int* pool_wdl,
+void do_learning(Net_train* pool,
 	uint64_t* time_curr, uint64_t* game_curr, uint64_t games,
 	int threads, int find_depth, int rand_depth, double lr) {
 
 	PRNG rng_0(3245356235923498ULL);
 
-	Net_train curr;
-	convert_to_float(&curr, src);
-
 	atomic<double> loss[THREADS_MAX];
 	atomic<uint64_t> games_(0);
 	thread thread_[THREADS_MAX];
-	Position* boards[THREADS_MAX];
-	int save_next = AUTOSAVE_S;
 
 	double loss_;
 
@@ -445,12 +418,11 @@ void do_learning(Net* dst, Net* src, Net* pool, int* pool_wdl,
 	Threads.stop = false;
 
 	for (int i = 0; i < threads; i++) {
-		boards[i] = new Position(nullptr);
 		PRNG* n = new PRNG(rng_0.get());
 		
 		thread_[i] = thread(
 			_do_learning_thread,
-			&curr, boards[i], pool, pool_wdl + POOL_SIZE * 2 * i, & (Threads.stop),
+			pool, &(Threads.stop),
 			loss + i, &games_, find_depth, rand_depth,
 			lr, n
 		);
@@ -487,76 +459,54 @@ void do_learning(Net* dst, Net* src, Net* pool, int* pool_wdl,
 			<< "Loss: " << std::scientific << loss_
 			<< std::endl;
 
-		if (time.count() / 1000 > save_next) {
-			convert_to_int(dst, &curr);
-			save_weights(dst, "temp-" + to_string((*game_curr) / 1000) + "K.bin");
-			save_next += AUTOSAVE_S;
-		}
-
 		if (games_ > games) { Threads.stop = true; break; }
 	}
 
 	for (int i = 0; i < threads; i++) {
 		thread_[i].join();
-		delete boards[i];
 	}
 
 	*time_curr += time.count() / 1000;
 	*game_curr += games_;
-
-	convert_to_int(dst, &curr);
-	save_weights(dst, "temp.bin");
 }
 
-void do_learning_cycle(Net* dst, Net* src, uint64_t* game_switch,
+void do_learning_cycle(Net* dst, string dir, uint64_t* game_switch,
 	int threads, int* find_depth, int* rand_depth, double* lr, int cycles)
 {
 	int count = 0;
 	uint64_t game_curr = 0;
 	uint64_t time_curr = 0;
 
-	Net pool[POOL_SIZE];
-	int pool_wdl[THREADS_MAX * POOL_SIZE * 2];
+	Net temp;
+	Net_train pool_train[POOL_SIZE];
 
 	cout << "Initializing Pool...\n";
-	for (int i = 0; i < POOL_SIZE; i++) {
-		memcpy(pool + i, src, sizeof(Net));
-		rand_weights(pool + i, 1);
+	int end = 0;
+	dir = filesystem::current_path().string() + "/" + dir;
+	for (const auto& entry : filesystem::directory_iterator(dir)) {
+		if (entry.path().extension() != ".bin") { continue; }
+		load_weights(&temp, entry.path().string());
+		convert_to_float(pool_train + end, &temp);
+		if (++end >= POOL_SIZE) { break; }
 	}
 
 	while (true) {
-		cout << "Playing Pool... ";
-		memset(pool_wdl, 0, sizeof(pool_wdl));
+		cout << "Playing Self... ";
 
 		for (int i = 0; i < cycles; i++) {
-			do_learning(dst, src, pool, pool_wdl,
+			do_learning(pool_train,
 				&time_curr, &game_curr, game_switch[i],
 				threads, find_depth[i], rand_depth[i], lr[i]);
 		}
 
-		save_weights(dst, "ep" + to_string(count)
-			+ "-" + to_string(game_curr / 1000) + "K.bin");
+		string leading_zero = count < 10 ? "00" : count < 100 ? "0" : "";
 
-		cout << "Updating Pool... ";
-		for (int i = 1; i < threads; i++) {
-			for (int j = 0; j < POOL_SIZE; j++) {
-				pool_wdl[2 * j + 0] += pool_wdl[2 * POOL_SIZE * i + 2 * j + 0];
-				pool_wdl[2 * j + 1] += pool_wdl[2 * POOL_SIZE * i + 2 * j + 1];
-			}
-		}
-
-		int least_score = -1;
-		int least_idx = 0;
 		for (int i = 0; i < POOL_SIZE; i++) {
-			int curr_score = 2 * pool_wdl[i * 2 + 0] + pool_wdl[i * 2 + 1];
-			if (curr_score > least_score) {
-				least_score = curr_score;
-				least_idx = i;
-			}
+			convert_to_int(&temp, pool_train + i);
+			save_weights(&temp, "net" + to_string(i) +
+				"-ep" + leading_zero + to_string(count)
+				+ "-" + to_string(game_curr / 1000) + "K.bin");
 		}
-
-		memcpy(pool + least_idx, dst, sizeof(Net));
-		cout << least_idx << endl;
 
 		count++;
 	}

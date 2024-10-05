@@ -106,7 +106,7 @@ int main() {
 
 		else if (word == "load") {
 			ss >> word;
-			word = std::filesystem::current_path().string() + word;
+			word = std::filesystem::current_path().string() + "/" + word;
 			Threads.acquire_lock();
 			load_weights(Threads.n, word);
 			Threads.set_weights();
@@ -115,7 +115,7 @@ int main() {
 
 		else if (word == "save") {
 			ss >> word;
-			word = std::filesystem::current_path().string() + word;
+			word = std::filesystem::current_path().string() + "/" + word;
 			save_weights(Threads.n, word);
 		}
 
@@ -126,12 +126,13 @@ int main() {
 
 		else if (word == "rand") {
 			ss >> word;
-			rand_weights(Threads.n, stoi(word));
+			rand_weights_all(Threads.n, stoi(word));
 			Threads.set_weights();
 		}
 
 		else if (word == "tune") {
 			int cycle = 0;
+			string dir;
 			int find_depth[32] = { };
 			int rand_depth[32] = { };
 			uint64_t games_[32] = { };
@@ -141,6 +142,8 @@ int main() {
 			int threads = stoi(word);
 
 			cout << "\nLearning with: " << threads << " Threads\n" << endl;
+
+			ss >> dir;
 
 			while (ss >> word) {
 				find_depth[cycle] = stoi(word);
@@ -157,7 +160,7 @@ int main() {
 				cycle++;
 			}
 
-			thread t = thread(do_learning_cycle, Threads.n, Threads.n,
+			thread t = thread(do_learning_cycle, Threads.n, dir,
 				games_, threads, find_depth, rand_depth, lr, cycle);
 			t.detach();
 
@@ -254,7 +257,6 @@ int main() {
 		}
 
 		else if (word == "nettest") {
-			net_verify();
 			net_speedtest();
 		}
 
@@ -262,15 +264,24 @@ int main() {
 			Threads.gen();
 		}
 
-		else if (word == "setmat") {
-			set_material(Threads.n);
-			Threads.set_weights();
+		else if (word == "encode") {
+			encode_literal(Threads.n);
 		}
 
-		else if (word == "write") {
-			write_weights(Threads.n);
+		//else if (word == "decode") {
+		//	string w[] = { "" };
+		//	decode_literal(Threads.n, w);
+		//}
+
+		else if (word == "stats") {
+			get_stats(Threads.n);
 		}
-		
+
+		else if (word == "rand1") {
+			ss >> word;
+			rand_weights_1(Threads.n, stoi(word));
+			Threads.set_weights();
+		}
 	}
 
 	return 44;

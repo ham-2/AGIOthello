@@ -171,7 +171,14 @@ Position::Position(Net* n) {
 	undo_stack = new Undo;
 	memset(undo_stack, 0, sizeof(Undo));
 	undo_stack->prev = nullptr;
+	undo_stack->del = true;
 	net = n;
+}
+
+Position::~Position()
+{
+	clear_stack();
+	delete undo_stack;
 }
 
 void Position::verify() {
@@ -425,14 +432,15 @@ void Position::undo_move_fast() {
 	pop_stack();
 }
 
-Position& Position::operator=(const Position board) {
+Position& Position::operator=(const Position& board) {
 	Net* temp = net;
 	clear_stack();
-	delete undo_stack;
+	Undo* t = undo_stack;
 	memcpy(this, &board, sizeof(Position));
-	undo_stack = new Undo;
+	undo_stack = t;
 	memcpy(undo_stack, board.undo_stack, sizeof(Undo));
 	undo_stack->prev = nullptr;
+	undo_stack->del = true;
 	net = temp;
 	return *this;
 }

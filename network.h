@@ -20,8 +20,8 @@ constexpr int SHIFT_L1 = 4;
 constexpr int SHIFT_L2 = 6;
 constexpr int SHIFT_L3 = 6;
 
-constexpr int MAX_L1 = 127;
-constexpr int MAX_L2 = 127;
+constexpr int MAX_L1 = 255;
+constexpr int MAX_L2 = 255;
 constexpr int MAX_L3 = 1023;
 
 constexpr int L0_OFFSET = SIZE_F1 * SQ_END;
@@ -46,13 +46,16 @@ struct Net {
 };
 
 inline void zero_weights(Net* net) { memset(net, 0, sizeof(Net)); }
-void rand_weights(Net* net, int bits);
+void rand_weights_all(Net* net, int bits);
+void rand_weights_1(Net* net, int mm);
 
 void set_material(Net* net);
 
 int load_weights(Net* net, std::string filename);
 void save_weights(Net* net, std::string filename);
-void write_weights(Net* net);
+void encode_literal(Net* net);
+void decode_literal(Net* dst, std::string* src);
+void get_stats(Net* net);
 
 void compute_L0(int16_t* dst_b, Piece* squares, Net* n);
 void update_L0(int16_t* dst, Square s, Piece from, Piece to, Net* n);
@@ -64,7 +67,5 @@ void compute_layer(int16_t* dst, int16_t* src,
 void compute_L3(int64_t* dst, int16_t* src, Net* n);
 
 void compute(int* dst, int16_t* src, Net* n, Color side_to_move);
-
-void verify_SIMD(Net* n);
 
 #endif

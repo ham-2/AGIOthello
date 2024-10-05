@@ -52,6 +52,7 @@ private:
 
 public:
 	Position(Net* n);
+	~Position();
 
 	static void init();
 
@@ -84,7 +85,7 @@ public:
 	void do_null_fast(Undo* new_undo);
 	void undo_move_fast();
 
-	Position& operator=(const Position board);
+	Position& operator=(const Position& board);
 
 	friend ostream& operator<<(ostream& os, Position& pos);
 };

@@ -4,7 +4,6 @@
 
 int load_weights(Net* net, std::string filename)
 {
-
 	std::cout << "Loading weights from \"" << filename << "\"\n";
 	std::ifstream input(filename, std::ios::binary);
 
@@ -24,7 +23,6 @@ int load_weights(Net* net, std::string filename)
 
 void save_weights(Net* net, std::string filename)
 {
-
 	std::cout << "Saving weights to \"" << filename << "\"\n";
 	std::ofstream output(filename, std::ios::binary);
 	
@@ -40,63 +38,122 @@ void save_weights(Net* net, std::string filename)
 	output.close();
 }
 
-void write_weights(Net* net) {
-	std::cout << "\n{";
+void encode_literal(Net* net) {
 	size_t s = 0;
-	while (true) {
-		std::cout << "0x" << std::hex << (uint64_t)(*((uint64_t*)(net)+s));
-		if ((++s) < sizeof(Net) / sizeof(uint64_t)) {
-			std::cout << ", ";
+
+	std::cout << "\n{ R\"(";
+	for (; s < sizeof(Net); s += 6) {
+		if (s % (6 << 8) == 0 && s!= 0) {
+			std::cout << ")\", R\"(";
 		}
-		else { break; }
+		
+		uint64_t* addr = reinterpret_cast<uint64_t*>((char*)(net) + s);
+		uint64_t b = *addr;
+
+		// 64 characters(use 35 ~ 98) : 6 bits
+		for (int i = 0; i < 8; i++) {
+			char c = (b & 63) + 35;
+			b >>= 6;
+			std::cout << c;
+		}
 	}
-	std::cout << "};";
+	std::cout << ")\"}" << std::endl;
 }
 
-void rand_weights(Net* net, int bits) {
+void decode_literal(Net* dst, std::string* src) {
+	memset(dst, 0, sizeof(*dst));
+	size_t s = 0;
+	for (; s < sizeof(Net); s += 6) {
+		if (s % (6 << 8) == 0 && s != 0) {
+			src += 1;
+		}
+
+		// next 48(64) bits
+		uint64_t b = 0;
+		size_t pos = (s % (6 << 8)) / 6;
+
+		for (int i = 7; i >= 0; i--) {
+			b <<= 6;
+			uint64_t c = *(src->c_str() + 8 * pos + i) - 35;
+			b |= c;
+		}
+
+		uint64_t* addr = reinterpret_cast<uint64_t*>((char*)(dst) + s);
+		*addr |= b;
+	}
+}
+
+template <typename T, int size>
+void get_minmax(T* addr) {
+	int max = -65536; int min = 65536;
+	for (int i = 0; i < size; i++) {
+		if (addr[i] > max) { max = addr[i]; }
+		if (addr[i] < min) { min = addr[i]; }
+	}
+	std::cout << "max " << max << " min " << min << '\n';
+}
+
+void get_stats(Net* net) {
+	std::cout << "L0_a: ";
+	get_minmax< int8_t, SIZE_F0 * SIZE_F1>(net->L0_a);
+	std::cout << "L0_b: ";
+	get_minmax<int16_t, SIZE_F1>(net->L0_b);
+	std::cout << "L1_a: ";
+	get_minmax< int8_t, SIZE_F1 * SIZE_F2>(net->L1_a);
+	std::cout << "L1_b: ";
+	get_minmax<int16_t, SIZE_F2>(net->L1_b);
+	std::cout << "L2_a: ";
+	get_minmax< int8_t, SIZE_F2 * SIZE_F3>(net->L2_a);
+	std::cout << "L2_b: ";
+	get_minmax<int16_t, SIZE_F3>(net->L2_b);
+	std::cout << "L3_a: ";
+	get_minmax<int16_t, SIZE_F3 * SIZE_OUT>(net->L3_a);
+	std::cout << "L3_b: ";
+	for (int i = 0; i < SIZE_OUT; i++) {
+		std::cout << net->L3_b[i] << ' ';
+	}
+	std::cout << std::endl;
+}
+
+void rand_weights_all(Net* net, int bits) {
 	if (bits < 0) { return; }
 	bits = bits > 7 ? 7 : bits;
 
 	uint8_t mask = uint8_t(~0) >> (8 - bits);
 
 	for (int i = 0; i < SIZE_F0 * SIZE_F1; i++) {
-		net->L0_a[i] += (rng.get() & mask) - (rng.get() & mask);
+		net->L0_a[i] += (rng.get() & rng.get() & rng.get() & mask) 
+			- (rng.get() & rng.get() & rng.get() & mask);
 	}
 	for (int i = 0; i < SIZE_F1 * SIZE_F2; i++) {
-		net->L1_a[i] += (rng.get() & mask) - (rng.get() & mask);
+		net->L1_a[i] += (rng.get() & rng.get() & rng.get() & mask)
+			- (rng.get() & rng.get() & rng.get() & mask);
 	}
 	for (int i = 0; i < SIZE_F2 * SIZE_F3; i++) {
-		net->L2_a[i] += (rng.get() & mask) - (rng.get() & mask);
+		net->L2_a[i] += (rng.get() & rng.get() & rng.get() & mask)
+			- (rng.get() & rng.get() & rng.get() & mask);
 	}
 	for (int i = 0; i < SIZE_F3; i++) {
-		net->L3_a[i] += (rng.get() & mask) - (rng.get() & mask);
+		net->L3_a[i] += (rng.get() & rng.get() & rng.get() & mask)
+			- (rng.get() & rng.get() & rng.get() & mask);
 	}
 }
 
-void set_material(Net* net) {
-	zero_weights(net);
-	for (int s = A1; s < SQ_END; s++) {
-		for (int i = 0; i < SIZE_F1; i += 2) {
-			net->L0_a[s * SIZE_F1 + i                ] = 1 * (1 << SHIFT_L1);
-			net->L0_a[s * SIZE_F1 + i + 1 + L0_OFFSET] = 1 * (1 << SHIFT_L1);
-		}
+void rand_weights_1(Net* net, int mm) {
+	if (mm & 1) {
+		net->L0_a[rng.get() % (SIZE_F0 * SIZE_F1)] += 1;
 	}
-	for (int i = 0; i < SIZE_F1; i += 2) {
-		for (int j = 0; j < SIZE_F2; j += 2) {
-			net->L1_a[j + 0 + (i + 0) * 32] = 2 * (1 << SHIFT_L2) / SIZE_F1;
-			net->L1_a[j + 1 + (i + 1) * 32] = 2 * (1 << SHIFT_L2) / SIZE_F1;
-		}
+	mm >>= 1;
+	if (mm & 1) {
+		net->L1_a[rng.get() % (SIZE_F1 * SIZE_F2)] += 1;
 	}
-	for (int i = 0; i < SIZE_F2; i += 2) {
-		for (int j = 0; j < SIZE_F3; j += 2) {
-			net->L2_a[j + 0 + (i + 0) * 32] = 2 * (1 << SHIFT_L3);
-			net->L2_a[j + 1 + (i + 1) * 32] = 2 * (1 << SHIFT_L3);
-		}
+	mm >>= 1;
+	if (mm & 1) {
+		net->L2_a[rng.get() % (SIZE_F2 * SIZE_F3)] += 1;
 	}
-	// after L2: SIZE_F2 * count each
-	for (int i = 0; i < SIZE_F3; i += 2) {
-		net->L3_a[i + 0] =  (1 << (EVAL_BITS - 6 - 9));
-		net->L3_a[i + 1] = -(1 << (EVAL_BITS - 6 - 9));
+	mm >>= 1;
+	if (mm & 1) {
+		net->L3_a[rng.get() % (SIZE_F3 * SIZE_OUT)] += 1;
 	}
 }
 
@@ -299,56 +356,4 @@ void compute(int* dst, int16_t* src, Net* n, Color side_to_move) {
 	for (int i = 0; i < SIZE_OUT; i++) {
 		dst[i] = int(P4[i]);
 	}
-}
-
-void verify_SIMD(Net* n) {
-
-	alignas(32)
-	int16_t P1_ACC[SIZE_F1 * 2];
-	int16_t P1_ACC_F[SIZE_F1 * 2];
-	int16_t P1[SIZE_F1];
-	int16_t P2[SIZE_F2];
-	int16_t P2_F[SIZE_F2];
-
-	Piece sq[64] = { };
-	
-	for (int i = 0; i < SIZE_F1; i++) {
-		P1_ACC[i          ] = n->L0_b[i];
-		P1_ACC[i + SIZE_F1] = n->L0_b[i];
-	}
-
-	Bitboard pieces[3] = {};
-	pieces[EMPTY] = FullBoard;
-
-	for (int i = 0; i < 64; i++) {
-		Square s = Square(i % 64);
-		Piece p = Piece(rng.get() & 3);
-		if (p == MISC) { p = EMPTY; }
-
-		pieces[sq[s]] ^= SquareBoard[s];
-		pieces[p] ^= SquareBoard[s];
-
-		update_L0(P1_ACC, s, sq[s], p, n);
-		sq[s] = p;
-	}
-
-	compute_L0(P1_ACC_F, sq, n);
-
-	int p1_err = 0;
-	for (int i = 0; i < SIZE_F1 * 2; i++) {
-		if (P1_ACC[i] != P1_ACC_F[i]) { p1_err++; }
-	}
-
-	std::cout << "update_L0 error: " << p1_err << std::endl;
-
-	ReLUClip<SIZE_F1, SHIFT_L1, MAX_L1>(P1, P1_ACC);
-	compute_layer<SIZE_F2, SIZE_F1>(P2, P1, n->L1_a, n->L1_b);
-	compute_layer_fallback<SIZE_F2, SIZE_F1>(P2_F, P1, n->L1_a, n->L1_b);
-
-	int p2_err = 0;
-	for (int i = 0; i < SIZE_F2; i++) {
-		if (P2[i] != P2_F[i]) { p2_err++; }
-	}
-
-	std::cout << "compute_Layer error: " << p2_err << std::endl;
 }
