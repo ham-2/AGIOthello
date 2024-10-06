@@ -438,15 +438,11 @@ void test_thread(Net* n1, Net* n2,
 			legal_moves.generate(board1);
 			if (legal_moves.list == legal_moves.end) {
 				if (board1.get_passed()) { break; }
-				Undo* u1 = new Undo;
-				board1.do_null_fast(u1);
-				u1->del = true;
+				board1.do_null_fast();
 			}
 			else {
 				Square m = legal_moves.list[rng.get() % legal_moves.length()];
-				Undo* u1 = new Undo;
-				board1.do_move_fast(m, u1);
-				u1->del = true;
+				board1.do_move_fast(m);
 			}
 		}
 

@@ -132,7 +132,6 @@ int main() {
 
 		else if (word == "tune") {
 			int cycle = 0;
-			string dir;
 			int find_depth[32] = { };
 			int rand_depth[32] = { };
 			uint64_t games_[32] = { };
@@ -142,8 +141,6 @@ int main() {
 			int threads = stoi(word);
 
 			cout << "\nLearning with: " << threads << " Threads\n" << endl;
-
-			ss >> dir;
 
 			while (ss >> word) {
 				find_depth[cycle] = stoi(word);
@@ -160,7 +157,7 @@ int main() {
 				cycle++;
 			}
 
-			thread t = thread(do_learning_cycle, Threads.n, dir,
+			thread t = thread(do_learning_cycle, Threads.n,
 				games_, threads, find_depth, rand_depth, lr, cycle);
 			t.detach();
 

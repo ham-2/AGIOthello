@@ -22,7 +22,7 @@ constexpr int SHIFT_L3 = 6;
 
 constexpr int MAX_L1 = 255;
 constexpr int MAX_L2 = 255;
-constexpr int MAX_L3 = 1023;
+constexpr int MAX_L3 = (1 << 15) - 1;
 
 constexpr int L0_OFFSET = SIZE_F1 * SQ_END;
 
@@ -64,7 +64,7 @@ void ReLUClip(int16_t* dst, int16_t* src);
 template <int size_dst, int size_src>
 void compute_layer(int16_t* dst, int16_t* src,
 	               int8_t* a, int16_t* b);
-void compute_L3(int64_t* dst, int16_t* src, Net* n);
+void compute_L3(int* dst, int16_t* src, Net* n);
 
 void compute(int* dst, int16_t* src, Net* n, Color side_to_move);
 

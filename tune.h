@@ -13,8 +13,6 @@
 #include "network.h"
 #include "threads.h"
 
-constexpr int POOL_SIZE = 1;
-
 struct Net_train {
 	std::mutex m;
 
@@ -32,11 +30,11 @@ struct Net_train {
 	float L3_b[SIZE_OUT];
 };
 
-void do_learning(Net_train* pool,
+void do_learning(Net_train* dst,
 	uint64_t* time_curr, uint64_t* game_curr, uint64_t games,
 	int threads, int find_depth, int rand_depth, double lr);
 
-void do_learning_cycle(Net* dst, string dir, uint64_t* game_switch,
+void do_learning_cycle(Net* src, uint64_t* game_switch,
 	int threads, int* find_depth, int* rand_depth, double* lr, int cycles);
 
 #endif

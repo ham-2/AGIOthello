@@ -81,9 +81,8 @@ public:
 	void do_null_move(Undo* new_undo);
 	void undo_null_move();
 	void do_move_wrap(Square s, Undo* new_undo);
-	void do_move_fast(Square s, Undo* new_undo);
-	void do_null_fast(Undo* new_undo);
-	void undo_move_fast();
+	void do_move_fast(Square s);
+	void do_null_fast();
 
 	Position& operator=(const Position& board);
 

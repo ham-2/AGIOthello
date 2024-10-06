@@ -43,15 +43,11 @@ void convert_to_int(Net* dst, Net_train* src)
 
 void copy_float(Net_train* dst, Net_train* src) {
 	src->m.lock();
+	constexpr size_t C = offsetof(Net_train, L0_a);
 
-	memcpy(dst->L0_a, src->L0_a, sizeof(src->L0_a));
-	memcpy(dst->L0_b, src->L0_b, sizeof(src->L0_b));
-	memcpy(dst->L1_a, src->L1_a, sizeof(src->L1_a));
-	memcpy(dst->L1_b, src->L1_b, sizeof(src->L1_b));
-	memcpy(dst->L2_a, src->L2_a, sizeof(src->L2_a));
-	memcpy(dst->L2_b, src->L2_b, sizeof(src->L2_b));
-	memcpy(dst->L3_a, src->L3_a, sizeof(src->L3_a));
-	memcpy(dst->L3_b, src->L3_b, sizeof(src->L3_b));
+	memcpy((char*)(dst) + C, 
+		(const char*)(src) + C,
+		sizeof(Net_train) - C);
 
 	src->m.unlock();
 }
@@ -148,8 +144,8 @@ void backpropagate(Net_train* dst, Position* board,
 	int16_t P2[SIZE_F2];
 	int16_t P3_RAW[SIZE_F3];
 	int16_t P3[SIZE_F3];
-	int64_t P[SIZE_OUT];
-	int64_t PS;
+	int P[SIZE_OUT];
+	int PS;
 
 	float mg = float(board->get_count(EMPTY)) / 64;
 	float eg = 1 - mg;
@@ -209,19 +205,19 @@ void backpropagate(Net_train* dst, Position* board,
 	for (Square s = A1; s < SQ_END; ++s) {
 		if (board->get_piece(s) == EMPTY) { continue; }
 
-		int addr = board->get_piece(s) == us ?
+			int addr = board->get_piece(s) == us ?
 			s * SIZE_F1 : s * SIZE_F1 + L0_OFFSET;
+			
+			for (int i = 0; i < SIZE_F1; i += 8) {
+				__m256 _src = _mm256_load_ps(dPdP1R + i);
+				__m256 _dst = _mm256_load_ps(dst->L0_a + addr + i);
 
-		for (int i = 0; i < SIZE_F1; i += 8) {
-			__m256 _src = _mm256_load_ps(dPdP1R + i);
-			__m256 _dst = _mm256_load_ps(dst->L0_a + addr + i);
-
-			_src = _mm256_mul_ps(_coeff256, _src);
-			_dst = _mm256_add_ps(_dst, _src);
-			_mm256_store_ps(dst->L0_a + addr + i, _dst);
+				_src = _mm256_mul_ps(_coeff256, _src);
+				_dst = _mm256_add_ps(_dst, _src);
+				_mm256_store_ps(dst->L0_a + addr + i, _dst);
+			}
 		}
 	}
-}
 
 int _play_rand(Position* board, PRNG* rng_) 
 {	
@@ -234,59 +230,45 @@ int _play_rand(Position* board, PRNG* rng_)
 		}
 
 		else {
-			Undo* u = new Undo;
-			board->do_null_fast(u);
-			u->del = true;
+			board->do_null_fast();
 			return 1;
 		}
 	}
 
 	else {
 		Square s = legal_moves.list[rng.get() % legal_moves.length()];
-		Undo* u = new Undo;
-		board->do_move_fast(s, u);
-		u->del = true;
+		board->do_move_fast(s);
 		return 1;
 	}
 }
 
 struct PBS {
-	Net_train* dst1_;
-	Net_train* dst2_;
-	Net_train* src1_;
-	Net_train* src2_;
+	Net_train* dst_;
 	atomic<double>* loss_curr;
 	double lr;
 	PRNG* r;
 };
 
-int _play_best(Position* board1, Position* board2, int find_depth, bool side, PBS* p)
+int _play_best(Position* board, int find_depth, bool side, PBS* p)
 {
 	MoveList legal_moves;
-	legal_moves.generate(*board1);
+	legal_moves.generate(*board);
 	int score_true;
 
-	if (board1->get_count(EMPTY) < SOLVE_DEPTH) { find_depth = SOLVE_DEPTH; }
+	if (board->get_count(EMPTY) < SOLVE_DEPTH) { find_depth = SOLVE_DEPTH; }
 
 	if (legal_moves.list == legal_moves.end) {
-		if (board1->get_passed()) { 
-			score_true = get_material(*board1);
+		if (board->get_passed()) { 
+			score_true = get_material(*board);
 			score_true = score_true > 0 ? EVAL_ALL :
 				score_true < 0 ? EVAL_NONE : 0;
 			return score_true;
 		}
 		
 		Undo u1, u2;
-		board1->do_null_move(&u1);
-		if (board1 == board2) {
-			score_true = -_play_best(board1, board2, find_depth, !side, p);
-		}
-		else {
-			board2->do_null_move(&u2);
-			score_true = -_play_best(board1, board2, find_depth, !side, p);
-			board2->undo_null_move();
-		}
-		board1->undo_null_move();
+		board->do_null_move(&u1);
+		score_true = -_play_best(board, find_depth, !side, p);
+		board->undo_null_move();
 	}
 
 	else {
@@ -294,44 +276,30 @@ int _play_best(Position* board1, Position* board2, int find_depth, bool side, PB
 		Square nmove = NULL_MOVE;
 		int comp_eval;
 		int new_eval = EVAL_INIT;
-		Position* currboard = side ? board1 : board2;
 
 		for (int i = 0; i < legal_moves.length(); i++) {
 			s = legal_moves.list[i];
 			Undo u;
-			currboard->do_move(s, &u);
-			comp_eval = -find_best(*currboard, find_depth,
+			board->do_move(s, &u);
+			comp_eval = -find_best(*board, find_depth,
 				EVAL_MIN, -new_eval);
 
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
 				nmove = s;
 			}
-			currboard->undo_move();
+			board->undo_move();
 		}
 
 		Undo u1, u2;
-		board1->do_move(nmove, &u1);
-		if (board1 == board2) {
-			score_true = -_play_best(board1, board2, find_depth, !side, p);
-		}
-		else {
-			board2->do_move(nmove, &u2);
-			score_true = -_play_best(board1, board2, find_depth, !side, p);
-			board2->undo_move();
-		}
-		board1->undo_move();
+		board->do_move(nmove, &u1);
+		score_true = -_play_best(board, find_depth, !side, p);
+		board->undo_move();
 	}
 
-	backpropagate(p->dst1_, board1,
+	backpropagate(p->dst_, board,
 		score_true,
 		p->loss_curr, p->lr);
-
-	if (board1 != board2) {
-		backpropagate(p->dst2_, board1,
-			score_true,
-			p->loss_curr, p->lr);
-	}
 
 	return score_true;
 }
@@ -340,65 +308,42 @@ void _do_learning_thread(Net_train* src,
 	atomic<bool>* stop, atomic<double>* loss, atomic<uint64_t>* games,
 	int find_depth, int rand_depth, double lr, PRNG* p) 
 {
-	Net* tmp[POOL_SIZE];
-	Net_train* src_[POOL_SIZE];
-	Net_train* dst_[POOL_SIZE];
+	Net* tmp = new Net;
+	Net_train* src_ = new Net_train;
+	Net_train* dst_ = new Net_train;
 
-	Position* board[POOL_SIZE];
-	for (int i = 0; i < POOL_SIZE; i++) {
-		tmp[i] = new Net;
-		src_[i] = new Net_train;
-		dst_[i] = new Net_train;
-		board[i] = new Position(tmp[i]);
-	}
+	Position* board = new Position(tmp);
 
 	while (!(*stop)) {
-		for (int i = 0; i < POOL_SIZE; i++) {
-			copy_float(src_[i], src + i);
-			convert_to_int(tmp[i], src_[i]);
-			memset(dst_[i], 0, sizeof(Net_train));
-		}
+		copy_float(src_, src);
+		convert_to_int(tmp, src_);
+		memset(dst_, 0, sizeof(Net_train));
 		
 		for (int rep = 0; rep < THREAD_LOOP; rep++) {
-			for (int b_1 = 0; b_1 < POOL_SIZE; b_1++) {
-				for (int b_2 = b_1; b_2 < POOL_SIZE; b_2++) {
-					board[b_1]->set(startpos_fen);
-					int depth = 0;
-					while ((depth < rand_depth) &&
-						_play_rand(board[b_1], p) > 0) {
-						depth++;
-					}
-					board[b_1]->set_squares();
-					board[b_1]->set_accumulator();
-					*board[b_2] = *board[b_1];
-					board[b_2]->set_accumulator();
-
-					PBS pb = { dst_[b_1], dst_[b_2],
-						src_[b_1], src_[b_2],
-						loss, lr, p };
-					_play_best(board[b_1], board[b_2], find_depth, true, &pb);
-					(*games)++;
-					if (b_1 == b_2) { continue;	}
-					_play_best(board[b_1], board[b_2], find_depth, false, &pb);
-					(*games)++;
-				}
+			board->set(startpos_fen);
+			int depth = 0;
+			while ((depth < rand_depth) &&
+				_play_rand(board, p) > 0) {
+				depth++;
 			}
+			board->set_squares();
+			board->set_accumulator();
+
+			PBS pb = { dst_, loss, lr, p };
+			_play_best(board, find_depth, true, &pb);
+			(*games)++;
 		}
 
-		for (int i = 0; i < POOL_SIZE; i++) {
-			add_float(src + i, dst_[i]);
-		}
+		add_float(src, dst_);
 	}
 
-	for (int i = 0; i < POOL_SIZE; i++) {
-		delete board[i];
-		delete tmp[i];
-		delete src_[i];
-		delete dst_[i];
-	}
+	delete board;
+	delete tmp;
+	delete src_;
+	delete dst_;
 }
 
-void do_learning(Net_train* pool,
+void do_learning(Net_train* src,
 	uint64_t* time_curr, uint64_t* game_curr, uint64_t games,
 	int threads, int find_depth, int rand_depth, double lr) {
 
@@ -422,7 +367,7 @@ void do_learning(Net_train* pool,
 		
 		thread_[i] = thread(
 			_do_learning_thread,
-			pool, &(Threads.stop),
+			src, &(Threads.stop),
 			loss + i, &games_, find_depth, rand_depth,
 			lr, n
 		);
@@ -470,44 +415,34 @@ void do_learning(Net_train* pool,
 	*game_curr += games_;
 }
 
-void do_learning_cycle(Net* dst, string dir, uint64_t* game_switch,
+void do_learning_cycle(Net* src, uint64_t* game_switch,
 	int threads, int* find_depth, int* rand_depth, double* lr, int cycles)
 {
 	int count = 0;
 	uint64_t game_curr = 0;
 	uint64_t time_curr = 0;
 
-	Net temp;
-	Net_train pool_train[POOL_SIZE];
-
-	cout << "Initializing Pool...\n";
-	int end = 0;
-	dir = filesystem::current_path().string() + "/" + dir;
-	for (const auto& entry : filesystem::directory_iterator(dir)) {
-		if (entry.path().extension() != ".bin") { continue; }
-		load_weights(&temp, entry.path().string());
-		convert_to_float(pool_train + end, &temp);
-		if (++end >= POOL_SIZE) { break; }
-	}
+	Net_train* train = new Net_train;
+	convert_to_float(train, src);
 
 	while (true) {
 		cout << "Playing Self... ";
 
 		for (int i = 0; i < cycles; i++) {
-			do_learning(pool_train,
+			do_learning(train,
 				&time_curr, &game_curr, game_switch[i],
 				threads, find_depth[i], rand_depth[i], lr[i]);
 		}
 
 		string leading_zero = count < 10 ? "00" : count < 100 ? "0" : "";
 
-		for (int i = 0; i < POOL_SIZE; i++) {
-			convert_to_int(&temp, pool_train + i);
-			save_weights(&temp, "net" + to_string(i) +
-				"-ep" + leading_zero + to_string(count)
-				+ "-" + to_string(game_curr / 1000) + "K.bin");
-		}
+		convert_to_int(src, train);
+		save_weights(src,
+			"ep" + leading_zero + to_string(count)
+			+ "-" + to_string(game_curr / 1000) + "K.bin");
 
 		count++;
 	}
+
+	delete train;
 }

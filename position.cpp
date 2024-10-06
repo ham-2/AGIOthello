@@ -384,52 +384,19 @@ void Position::do_move_wrap(Square s, Undo* new_undo) {
 	else { do_move(s, new_undo); }
 }
 
-void Position::do_move_fast(Square s, Undo* new_undo) {
-	memcpy(new_undo, undo_stack, sizeof(Undo));
-	new_undo->s = s;
-	new_undo->prev = undo_stack;
-	new_undo->pass = false;
-	new_undo->del = false;
-
-	undo_stack = new_undo;
-
+void Position::do_move_fast(Square s) {
 	Piece p = side_to_move ? WHITE_P : BLACK_P;
 	Bitboard captures = index_captures(s, p);
 
 	pieces[~p] ^= captures;
 	pieces[p] ^= captures;
-
-	new_undo->captured = captures;
-
 	pieces[p] ^= SquareBoard[s];
 	pieces[EMPTY] ^= SquareBoard[s];
 	side_to_move = ~side_to_move;
 }
 
-void Position::do_null_fast(Undo* new_undo) {
-	memcpy(new_undo, undo_stack, sizeof(Undo));
-	new_undo->s = NULL_MOVE;
-	new_undo->prev = undo_stack;
-	new_undo->pass = true;
-	new_undo->del = false;
-
-	undo_stack = new_undo;
-}
-
-void Position::undo_move_fast() {
-	Square s = undo_stack->s;
-	if (s == NULL_MOVE) { undo_null_move(); return; }
-
-	Piece p = side_to_move ? WHITE_P : BLACK_P;
-	Bitboard captured = undo_stack->captured;
-
-	pieces[~p] ^= captured;
-	pieces[p] ^= captured;
-	pieces[~p] ^= SquareBoard[s];
-	pieces[EMPTY] ^= SquareBoard[s];
-
+void Position::do_null_fast() {
 	side_to_move = ~side_to_move;
-	pop_stack();
 }
 
 Position& Position::operator=(const Position& board) {

@@ -326,7 +326,7 @@ void compute_layer(int16_t* dst,
 #endif
 }
 
-void compute_L3(int64_t* dst, int16_t* src, Net* n) {
+void compute_L3(int* dst, int16_t* src, Net* n) {
 	for (int j = 0; j < SIZE_OUT; j++) {
 		dst[j] = n->L3_b[j];
 	}
@@ -344,16 +344,11 @@ void compute(int* dst, int16_t* src, Net* n, Color side_to_move) {
 	int16_t P1[SIZE_F1];
 	int16_t P2[SIZE_F2];
 	int16_t P3[SIZE_F3];
-	int64_t P4[SIZE_OUT];
 	
 	ReLUClip<SIZE_F1, SHIFT_L1, MAX_L1>(P1, src + (side_to_move ? SIZE_F1 : 0));
 	compute_layer<SIZE_F2, SIZE_F1>(P2, P1, n->L1_a, n->L1_b);
 	ReLUClip<SIZE_F2, SHIFT_L2, MAX_L2>(P2, P2);
 	compute_layer<SIZE_F3, SIZE_F2>(P3, P2, n->L2_a, n->L2_b);
 	ReLUClip<SIZE_F3, SHIFT_L3, MAX_L3>(P3, P3);
-	compute_L3(P4, P3, n);
-
-	for (int i = 0; i < SIZE_OUT; i++) {
-		dst[i] = int(P4[i]);
-	}
+	compute_L3(dst, P3, n);
 }
