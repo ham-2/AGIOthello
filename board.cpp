@@ -29,19 +29,6 @@ bool parse_piece(char c, Piece& p) {
 	return true;
 }
 
-void print(ostream& os, Bitboard b) {
-	Square sq = A8;
-	for (int i = 0; i < 8; i++) {
-		for (int j = 0; j < 8; j++) {
-			os << int((b >> sq) & 1) << " ";
-			++sq;
-		}
-		sq += (-16);
-		os << "\n";
-	}
-	os << "\n";
-}
-
 namespace Board {
 
 	void init() {

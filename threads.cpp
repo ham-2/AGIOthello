@@ -5,7 +5,7 @@
 using namespace std;
 
 Threadmgr Threads;
-const char* startpos_fen = "8/8/8/3@O3/3O@3/8/8/8 b";
+const char* startpos_fen = "8/8/8/3OX3/3XO3/8/8/8 b";
 const char* default_weight = "weights.bin";
 	
 void lazy_smp(Thread* t) {
@@ -132,18 +132,20 @@ void Threadmgr::set_weights() {
 void Threadmgr::do_move(Square m) {
 	Undo* u = new Undo;
 	board->do_move_wrap(m, u);
-	u->del = true;
 	for (int i = 0; i < threads.size(); i++) {
 		Undo* u = new Undo;
 		threads[i]->board->do_move_wrap(m, u);
-		u->del = true;
 	}
 }
 
 void Threadmgr::undo_move() {
+	Undo* u = board->get_stack();
 	board->undo_move();
+	delete u;
 	for (int i = 0; i < threads.size(); i++) {
+		Undo* u = board->get_stack();
 		threads[i]->board->undo_move();
+		delete u;
 	}
 }
 

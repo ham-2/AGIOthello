@@ -4,27 +4,8 @@
 
 #include "position.h"
 
-// For Zobrist Hashing
-Key piece_keys[3][64] = { };
-Key side_to_move_key;
-
-void Position::init() {
-	//set Zobrist keys at startup
-	PRNG generator = PRNG(9235123129483259312ULL);
-
-	for (Piece p : { BLACK_P, WHITE_P }) {
-		for (int j = 0; j < 64; j++) {
-			piece_keys[p][j] = Key(generator.get());
-		}
-	}
-
-	side_to_move_key = Key(generator.get());
-}
-
 void Position::pop_stack() {
-	Undo* t = undo_stack;
 	undo_stack = undo_stack->prev;
-	if (t->del) { delete t; }
 }
 
 void Position::clear_stack() {
@@ -138,8 +119,7 @@ inline void Position::place(Piece p, Square s) {
 	pieces[p] ^= SquareBoard[s];
 	pieces[EMPTY] ^= SquareBoard[s];
 
-	piece_count[EMPTY]--;
-	piece_count[p]++;
+	empty_count--;
 }
 
 inline void Position::remove(Piece p, Square s) {
@@ -147,38 +127,32 @@ inline void Position::remove(Piece p, Square s) {
 	pieces[p] ^= SquareBoard[s];
 	pieces[EMPTY] ^= SquareBoard[s];
 
-	piece_count[EMPTY]++;
-	piece_count[p]--;
+	empty_count++;
 }
 
 void Position::rebuild() { // computes others from squares data.
-	for (int i = 0; i < 3; i++) { pieces[i] = 0; piece_count[i] = 0; }
+	for (int i = 0; i < 3; i++) { pieces[i] = 0; }
 	
 	// set EMPTYs to full
-	piece_count[EMPTY] = 64;
+	empty_count = 64;
 	pieces[EMPTY] = FullBoard;
 
 	for (Square s = A1; s < SQ_END; ++s) {
 		Piece p = squares[s];
-		place(p, s);
-
-		undo_stack->key ^= piece_keys[p][s];
+		if (p != EMPTY) { place(p, s); }
 	}
 }
 
 Position::Position(Net* n) {
 	memset(this, 0, sizeof(Position));
-	undo_stack = new Undo;
-	memset(undo_stack, 0, sizeof(Undo));
+	undo_stack = &(this->root);
 	undo_stack->prev = nullptr;
-	undo_stack->del = true;
 	net = n;
 }
 
 Position::~Position()
 {
 	clear_stack();
-	delete undo_stack;
 }
 
 void Position::verify() {
@@ -196,10 +170,6 @@ void Position::verify() {
 
 		if (testpos.pieces[i] != pieces[i]) {
 			cout << "Pieces inconsistent at " << i << endl;
-		}
-
-		if (i != 0 && testpos.piece_count[i] != piece_count[i]) {
-			cout << "Piece count inconsistent at " << i << endl;
 		}
 	}
 
@@ -220,9 +190,7 @@ void Position::set_squares() {
 		sqc[squares[s]]++;
 	}
 
-	piece_count[EMPTY]   = popcount(pieces[EMPTY]);
-	piece_count[BLACK_P] = popcount(pieces[BLACK_P]);
-	piece_count[WHITE_P] = popcount(pieces[WHITE_P]);
+	empty_count = popcount(pieces[EMPTY]);
 }
 
 void Position::show() {
@@ -258,23 +226,18 @@ void Position::set(string fen) {
 
 	// first clear stack
 	clear_stack();
-	Undo* temp = undo_stack;
 	Net* temp2 = net;
 	memset(this, 0, sizeof(Position));
-	undo_stack = temp;
+	undo_stack = &(this->root);
 	net = temp2;
-	memset(undo_stack, 0, sizeof(Undo));
 
 	// set pieces from rank 8.
 	ss >> noskipws >> c;
-	Square sq = A8;
+	Square sq = A1;
 	Piece p;
 	while (c != ' ') {
 		if (isdigit(c)) {
 			sq += (c - '0');
-		}
-		else if (c == '/') {
-			sq += (-16);
 		}
 		else if (parse_piece(c, p)) {
 			squares[sq] = p;
@@ -286,7 +249,6 @@ void Position::set(string fen) {
 	// white / black to move
 	ss >> c;
 	side_to_move = c == 'w' ? WHITE : BLACK;
-	if (side_to_move == WHITE) { undo_stack->key ^= side_to_move_key; }
 	ss >> c;
 
 	// write other data
@@ -300,8 +262,6 @@ void Position::do_move(Square s, Undo* new_undo) {
 	memcpy(new_undo, undo_stack, sizeof(Undo));
 	new_undo->s = s;
 	new_undo->prev = undo_stack;
-	new_undo->pass = false;
-	new_undo->del = false;
 	
 	undo_stack = new_undo;
 
@@ -319,21 +279,14 @@ void Position::do_move(Square s, Undo* new_undo) {
 		update_L0(new_undo->accumulator, c, ~p, p, net);
 
 		squares[c] = p;
-
-		piece_count[p]++;
-		piece_count[~p]--;
-
-		new_undo->key ^= piece_keys[~p][c] ^ piece_keys[p][c];
 	}
 
 	// Place the new piece
 	update_L0(new_undo->accumulator, s, EMPTY, p, net);
 
 	place(p, s);
-	new_undo->key ^= piece_keys[p][s];
 	
 	side_to_move = ~side_to_move;
-	new_undo->key ^= side_to_move_key;
 }
 
 void Position::undo_move() {
@@ -350,9 +303,6 @@ void Position::undo_move() {
 	while (captured) {
 		Square c = pop_lsb(&captured);
 		squares[c] = p;
-
-		piece_count[p]++;
-		piece_count[~p]--;
 	}
 
 	side_to_move = ~side_to_move;
@@ -363,13 +313,10 @@ void Position::do_null_move(Undo* new_undo) {
 	memcpy(new_undo, undo_stack, sizeof(Undo));
 	new_undo->s = NULL_MOVE;
 	new_undo->prev = undo_stack;
-	new_undo->pass = true;
-	new_undo->del = false;
 
 	undo_stack = new_undo;
 
 	side_to_move = ~side_to_move;
-	new_undo->key ^= side_to_move_key;
 
 	new_undo->captured = EMPTY;
 }
@@ -384,14 +331,15 @@ void Position::do_move_wrap(Square s, Undo* new_undo) {
 	else { do_move(s, new_undo); }
 }
 
-void Position::do_move_fast(Square s) {
+void Position::do_move_fast(Square s, Bitboard* captures) {
 	Piece p = side_to_move ? WHITE_P : BLACK_P;
-	Bitboard captures = index_captures(s, p);
+	*captures = index_captures(s, p);
+	
 
-	pieces[~p] ^= captures;
-	pieces[p] ^= captures;
-	pieces[p] ^= SquareBoard[s];
+	pieces[~p] ^= *captures;
+	pieces[p] ^= *captures ^ SquareBoard[s];
 	pieces[EMPTY] ^= SquareBoard[s];
+	empty_count--;
 	side_to_move = ~side_to_move;
 }
 
@@ -399,15 +347,29 @@ void Position::do_null_fast() {
 	side_to_move = ~side_to_move;
 }
 
+void Position::undo_move_fast(Square s, Bitboard* captures)
+{
+	Piece p = side_to_move ? WHITE_P : BLACK_P; // Piece to place again
+
+	pieces[~p] ^= *captures ^ SquareBoard[s];
+	pieces[p] ^= *captures;
+	pieces[EMPTY] ^= SquareBoard[s];
+	empty_count++;
+	side_to_move = ~side_to_move;
+}
+
+void Position::undo_null_fast()
+{
+	side_to_move = ~side_to_move;
+}
+
 Position& Position::operator=(const Position& board) {
 	Net* temp = net;
 	clear_stack();
-	Undo* t = undo_stack;
 	memcpy(this, &board, sizeof(Position));
-	undo_stack = t;
+	undo_stack = &root;
 	memcpy(undo_stack, board.undo_stack, sizeof(Undo));
 	undo_stack->prev = nullptr;
-	undo_stack->del = true;
 	net = temp;
 	return *this;
 }

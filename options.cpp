@@ -6,7 +6,6 @@ void print_option() {
 	Threads.acquire_cout();
 	cout << "option name Threads type spin default 1 min 1 max " << THREADS_MAX << '\n'
 		<< "option name Hash type spin default 1 min 1 max 64 \n"
-		<< "option name Stopifmate type check default false\n"
 		<< endl;
 	Threads.release_cout();
 }
@@ -38,19 +37,5 @@ void set_option(istringstream& ss) {
 				Main_TT.change_size((size_t)(new_size));
 			}
 		}
-
-		else if (word == "Stopifmate") {
-			ss >> word;
-			if (word == "value") {
-				ss >> word;
-				if (word == "true") {
-					stop_if_mate = true;
-				}
-				else if (word == "false") {
-					stop_if_mate = false;
-				}
-			}
-		}
-
 	}
 }

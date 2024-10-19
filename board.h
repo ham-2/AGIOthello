@@ -156,11 +156,12 @@ enum Color : bool { BLACK = false, WHITE = true };
 
 inline constexpr Color operator~(Color c) { return Color(c ^ 1); }
 
-const std::string FEN_Pieces = " @OX";
+const std::string FEN_Pieces = "-XO@";
+const std::string PRN_Pieces = " @OX";
 enum Piece : char { EMPTY = 0, BLACK_P = 1, WHITE_P = 2, MISC = 3 };
 
 inline constexpr Piece operator~(Piece p) { return Piece(p ^ 3); }
-inline char print_piece(Piece p) { return FEN_Pieces[p]; }
+inline char print_piece(Piece p) { return PRN_Pieces[p]; }
 bool parse_piece(char c, Piece& p);
 
 inline Piece color_to_piece(Color c) { return c ? WHITE_P : BLACK_P; }
@@ -169,7 +170,6 @@ inline std::ostream& operator<<(std::ostream& os, Square s) {
 	if (s == NULL_MOVE) { return os << "00"; }
 	return os << char('a' + get_file(s)) << 1 + get_rank(s);
 }
-void print(std::ostream& os, Bitboard b);
 
 namespace Board {
 	void init();

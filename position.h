@@ -12,8 +12,6 @@ using namespace std;
 typedef uint64_t Key;
 
 struct Undo {
-	Key key;
-
 	// Informations needed to undo a move. Stored in a stack
 	Undo* prev;
 	Square s;
@@ -22,20 +20,17 @@ struct Undo {
 	// For eval
 	alignas(32)
 	int16_t accumulator[2 * SIZE_F1];
-
-	// Other useful informations
-	bool pass;
-	bool del;
 };
 
 class Position {
 private:
 	Undo* undo_stack;
+	Undo root;
 
 	Piece squares[64];
 
 	Bitboard pieces[3];
-	int piece_count[3];
+	int empty_count;
 	Color side_to_move;
 
 	Net* net;
@@ -54,17 +49,18 @@ public:
 	Position(Net* n);
 	~Position();
 
-	static void init();
-
 	void verify();
 
-	inline Key get_key() { return undo_stack->key; }
+	inline Key get_key() { return 
+		side_to_move ? hash_128i(~pieces[EMPTY], pieces[BLACK_P]) 
+		: hash_128i(~pieces[EMPTY], pieces[WHITE_P]); }
 	Color get_side() { return side_to_move; }
 	Piece get_piece(Square s) { return squares[s]; }
 	inline Bitboard get_pieces(Piece p) { return pieces[p]; }
-	inline int get_count(Piece p) { return piece_count[p]; }
+	inline int get_count_empty() { return empty_count; }
+	inline int get_count(Piece p) { return popcount(pieces[p]); }
 	Bitboard get_occupied() { return ~pieces[EMPTY]; }
-	inline bool get_passed() { return undo_stack->pass; }
+	inline Undo* get_stack() { return undo_stack; }
 	inline int16_t* get_accumulator() { return undo_stack->accumulator; }
 	inline void set_accumulator() { compute_L0(undo_stack->accumulator, squares, net); }
 	inline Net* get_net() { return net; }
@@ -81,8 +77,10 @@ public:
 	void do_null_move(Undo* new_undo);
 	void undo_null_move();
 	void do_move_wrap(Square s, Undo* new_undo);
-	void do_move_fast(Square s);
+	void do_move_fast(Square s, Bitboard* captures);
 	void do_null_fast();
+	void undo_move_fast(Square s, Bitboard* captures);
+	void undo_null_fast();
 
 	Position& operator=(const Position& board);
 

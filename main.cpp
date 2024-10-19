@@ -2,6 +2,7 @@
 #include <sstream>
 #include <string>
 #include <chrono>
+#include <bitset>
 
 #include "options.h"
 #include "board.h"
@@ -11,8 +12,6 @@
 #include "search.h"
 #include "threads.h"
 #include "network.h"
-
-#include <bitset>
 
 using namespace std;
 using namespace std::chrono;
@@ -25,7 +24,6 @@ int main() {
 	milliseconds startup_time = milliseconds(0);
 	
 	Board::init();
-	Position::init();
 	Threads.init();
 
 	system_clock::time_point time_now = system_clock::now();
@@ -238,10 +236,13 @@ int main() {
 		}
 
 		else if (word == "perft") {
+			ss >> word;
+			bool fast = (word[1] == 'f');
+
 			int depth;
 			ss >> depth;
 			Threads.acquire_lock();
-			perft(Threads.board, depth);
+			perft(Threads.board, depth, fast);
 			Threads.release_lock();
 		}
 

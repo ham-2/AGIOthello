@@ -48,47 +48,34 @@ TT::~TT() {
 int TT::probe(Key key, TTEntry* probe) {
 	TTEntry* entry_ptr = table + (key & SIZE_NUM);
 	entry_ptr->m.lock();
-	if (entry_ptr->key == key) { // Real hit
-		memcpy(probe, entry_ptr, sizeof(TTEntry));
-		entry_ptr->m.unlock();
-		return 0;
-	}
-	else { // False hit or New node
-		entry_ptr->m.unlock();
-		return -1;
-	}
+	memcpy(probe, entry_ptr, offsetof(TTEntry, m));
+	entry_ptr->m.unlock();
+	return 0;
 }
 
-void TT::register_entry(Key key, int depth, int eval, Square move) {
+void TT::register_entry(Key key, int eval, Square move, uint8_t depth, int8_t type) {
 	TTEntry* entry_ptr = table + (key & SIZE_NUM);
 	entry_ptr->m.lock();
 	if (depth >= entry_ptr->depth ||
 		tt_sn > entry_ptr->table_sn) {
 		entry_ptr->key = key;
-		entry_ptr->depth = depth;
 		entry_ptr->eval = eval;
 		entry_ptr->nmove = move;
 		entry_ptr->table_sn = tt_sn;
+		entry_ptr->depth = depth;
+		entry_ptr->type = type;
 	}
 	entry_ptr->m.unlock();
 	return;
 }
 
-TTEntry* TT::backup_entry(Key key) {
-	TTEntry* entry_ptr = table + (key & SIZE_NUM);
-	TTEntry* temp = new TTEntry;
-	entry_ptr->m.lock();
-	memcpy(temp, entry_ptr, sizeof(TTEntry));
-	entry_ptr->m.unlock();
-	temp->m.unlock();
-	return temp;
-}
-
 void TT::write_entry(TTEntry* ptr) {
 	TTEntry* entry_ptr = table + (ptr->key & SIZE_NUM);
 	entry_ptr->m.lock();
-	ptr->m.lock();
-	memcpy(entry_ptr, ptr, sizeof(TTEntry));
+	if (ptr->depth >= entry_ptr->depth ||
+		tt_sn > entry_ptr->table_sn) {
+		memcpy(entry_ptr, ptr, sizeof(TTEntry) - offsetof(TTEntry, m));
+	}
 	entry_ptr->m.unlock();
 }
 
@@ -100,6 +87,7 @@ void TT::clear_entry(Key key) {
 	entry_ptr->eval = 0;
 	entry_ptr->nmove = Square(0);
 	entry_ptr->table_sn = 0;
+	entry_ptr->type = 0;
 	entry_ptr->m.unlock();
 	return;
 }
@@ -117,16 +105,19 @@ void TT::change_size(size_t new_size) {
 	table = static_cast<TTEntry*>(table_malloc(TT_LENGTH * sizeof(TTEntry)));
 }
 
-void getpv(ostream& os, Position* board, int& depth) {
+void getpv(ostream& os, Position* board, int& depth, Square last) {
 	string pv;
 	TTEntry probe = {};
-	if (Main_TT.probe(board->get_key(), &probe) == 0 &&
+	Main_TT.probe(board->get_key(), &probe);
+	if (last == NULL_MOVE && probe.nmove == NULL_MOVE) { return; }
+
+	if (probe.key == board->get_key() &&
 		probe.nmove != GAME_END) {
 		Undo u;
 		board->do_move_wrap(probe.nmove, &u);
 		os << probe.nmove << " ";
 		depth++;
-		getpv(os, board, depth);
+		getpv(os, board, depth, probe.nmove);
 		board->undo_move();
 	}
 }

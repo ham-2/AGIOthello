@@ -43,4 +43,6 @@ public:
 
 extern PRNG rng;
 
+uint64_t hash_128i(uint64_t upper, uint64_t lower);
+
 #endif

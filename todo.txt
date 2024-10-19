@@ -1,10 +1,7 @@
-check if undo.del can be removed
-
-check if we can rotate/filp Key -> maybe exploit symmetry
-idea: always rotate board to make some condition true?
-
 check if we can get complete pv
 
 #includes
 
 compute US - THEM and THEM - US at loading and optimize update_L0
+
+XOR update bitboards and update on demand?

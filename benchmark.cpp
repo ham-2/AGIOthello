@@ -20,21 +20,49 @@ uint64_t _perft(Position* board, int depth) {
 			board->undo_move();
 		}
 		if (ml.list == ml.end) {
-			if (board->get_passed()) {
+			Undo u;
+			board->do_null_move(&u);
+			ml.generate(*board);
+			if (ml.list == ml.end) {
+				board->undo_null_move();
 				return 1ULL;
 			}
-			else {
-				Undo u;
-				board->do_null_move(&u);
-				value += _perft(board, depth - 1);
-				board->undo_null_move();
-			}
+			value += _perft(board, depth - 1);
+			board->undo_null_move();
 		}
 		return value;
 	}
 }
 
-void perft(Position* board, int depth) {
+uint64_t _perft_f(Position* board, int depth) {
+	if (depth == 0) {
+		return 1ULL;
+	}
+	else {
+		uint64_t value = 0;
+		MoveList ml;
+		ml.generate(*board);
+		for (Square* s = ml.list; s < ml.end; s++) {
+			Bitboard c;
+			board->do_move_fast(*s, &c);
+			value += _perft_f(board, depth - 1);
+			board->undo_move_fast(*s, &c);
+		}
+		if (ml.list == ml.end) {
+			board->do_null_fast();
+			ml.generate(*board);
+			if (ml.list == ml.end) {
+				board->undo_null_fast();
+				return 1ULL;
+			}
+			value += _perft(board, depth - 1);
+			board->undo_null_fast();
+		}
+		return value;
+	}
+}
+
+void perft(Position* board, int depth, bool fast) {
 	system_clock::time_point time_start = system_clock::now();
 	milliseconds time = milliseconds(0);
 
@@ -42,12 +70,23 @@ void perft(Position* board, int depth) {
 	MoveList ml;
 	ml.generate(*board);
 	for (Square* s = ml.list; s < ml.end; s++) {
-		Undo u;
-		board->do_move(*s, &u);
-		uint64_t sub = _perft(board, depth - 1);
-		cout << *s << " " << sub << endl;
-		value += sub;
-		board->undo_move();
+		if (fast) {
+			Bitboard c;
+			board->do_move_fast(*s, &c);
+			uint64_t sub = _perft_f(board, depth - 1);
+			cout << *s << " " << sub << endl;
+			value += sub;
+			board->undo_move_fast(*s, &c);
+		}
+		else {
+			Undo u;
+			board->do_move(*s, &u);
+			uint64_t sub = _perft(board, depth - 1);
+			cout << *s << " " << sub << endl;
+			value += sub;
+			board->undo_move();
+		}
+
 	}
 	cout << value << '\n';
 
@@ -57,35 +96,32 @@ void perft(Position* board, int depth) {
 		double(value) / time.count() / 1000 << " MNps" << endl;
 }
 
-int _solve() {
-
+int _solve(int depth, int alpha, int beta, int& type) {
 	nodes++;
-
 	if (Threads.stop) { return EVAL_FAIL; }
-
-	// Move generation
-	MoveList legal_moves;
-	legal_moves.generate(*Threads.board);
 
 	Key root_key = Threads.board->get_key();
 
-	// No legal moves
-	if (legal_moves.list == legal_moves.end) {
+	MoveList legal_moves;
+	legal_moves.generate(*Threads.board);
 
-		if (Threads.board->get_passed()) {
+	if (legal_moves.list == legal_moves.end) {
+		Threads.board->do_null_fast();
+		legal_moves.generate(*Threads.board);
+		if (legal_moves.list == legal_moves.end) {
+			Threads.board->undo_null_fast();
 			int score = get_material_eval(*Threads.board);
-			Main_TT.register_entry(root_key, 64, score, GAME_END);
+			type = 0;
+			Main_TT.register_entry(root_key, score, GAME_END, 64, 0);
 			return score;
 		}
 
-		else {
-			Undo u;
-			Threads.board->do_null_move(&u);
-			int after_pass = -_solve();
-			Threads.board->undo_null_move();
-			Main_TT.register_entry(root_key, 64, after_pass, NULL_MOVE);
-			return after_pass;
-		}
+		int type_;
+		int after_pass = -_solve(depth - 1, -beta, -alpha, type_);
+		Threads.board->undo_null_fast();
+		type = -type_;
+		Main_TT.register_entry(root_key, after_pass, NULL_MOVE, 64 + depth, type);
+		return after_pass;
 	}
 
 	// Legal moves
@@ -96,27 +132,60 @@ int _solve() {
 		int new_eval = EVAL_INIT;
 
 		int i = 0;
+		type = 0;
 		while ((i < legal_moves.length()) && !(Threads.stop)) {
 			s = *(legal_moves.list + i);
 
-			// Do move
-			Undo u;
-			Threads.board->do_move(s, &u);
+			Bitboard c;
+			Threads.board->do_move_fast(s, &c);
 
-			comp_eval = -_solve();
+			TTEntry probe;
+			Main_TT.probe(Threads.board->get_key(), &probe);
+			if (!is_miss(&probe, Threads.board->get_key())) {
+				comp_eval = -probe.eval;
+				if (comp_eval >= beta &&
+					probe.type != -1) {
+					new_eval = comp_eval;
+					nmove = s;
+					type = -1;
+					alpha = beta;
+					Threads.board->undo_move_fast(s, &c);
+					break;
+				}
+				if (comp_eval < alpha &&
+					probe.type != 1) {
+					Threads.board->undo_move_fast(s, &c);
+					i++;
+					continue;
+				}
+			}
+
+			int type_;
+			comp_eval = -_solve(depth - 1, -beta, -alpha, type_);
 
 			if (comp_eval > new_eval) {
 				new_eval = comp_eval;
 				nmove = s;
+				if (new_eval > alpha) {
+					alpha = new_eval;
+				}
+				if (alpha >= beta) {
+					type = -1;
+					alpha = beta;
+					Threads.board->undo_move_fast(s, &c);
+					break;
+				}
 			}
 
-			Threads.board->undo_move();
+			Threads.board->undo_move_fast(s, &c);
 			i++;
 		}
 
-		Main_TT.register_entry(root_key, 64, new_eval, nmove);
+		if (new_eval < alpha) { type = 1; }
 
-		return new_eval;
+		Main_TT.register_entry(root_key, alpha, nmove, 64 + depth, type);
+
+		return alpha;
 	}
 }
 
@@ -126,7 +195,8 @@ void solve() {
 	system_clock::time_point time_start = system_clock::now();
 	milliseconds time = milliseconds(0);
 
-	int eval = _solve();
+	int type;
+	int eval = _solve(64, EVAL_MIN, EVAL_MAX, type);
 	Threads.stop = true;
 
 	system_clock::time_point time_now = system_clock::now();
@@ -135,10 +205,11 @@ void solve() {
 	stringstream buf;
 	int depth = 0;
 	getpv(buf, Threads.board, depth);
-	cout << "elapsed time: " << time.count() << "ms" 
+	cout << "elapsed time: " << time.count() << "ms"
 		<< "\neval: " << eval_print(eval)
 		<< "\nnodes: " << nodes
-		<< ", " << double(nodes) / time.count() / 1000 << " MNps" 
+		<< ", " << double(nodes) / time.count() / 1000 << " MNps"
+		<< "\nType: " << type
 		<< "\npv: " << buf.str() << endl;
 }
 
@@ -211,17 +282,16 @@ int find_best(Position& board, int depth,
 	legal_moves.generate(board);
 
 	if (legal_moves.list == legal_moves.end) {
-		if (board.get_passed()) {
+		Undo u;
+		board.do_null_move(&u);
+		legal_moves.generate(board);
+		if (legal_moves.list == legal_moves.end) {
+			board.undo_null_move();
 			return get_material_eval(board);
 		}
-
-		else {
-			Undo u;
-			board.do_null_move(&u);
-			int after_pass = -find_best(board, depth - 1, -beta, -alpha);
-			board.undo_null_move();
-			return after_pass;
-		}
+		int after_pass = -find_best(board, depth - 1, -beta, -alpha);
+		board.undo_null_move();
+		return after_pass;
 	}
 
 	Square s;
@@ -255,17 +325,16 @@ int find_g(Position& board, int depth,
 	legal_moves.generate(board);
 
 	if (legal_moves.list == legal_moves.end) {
-		if (board.get_passed()) {
+		Undo u;
+		board.do_null_move(&u);
+		legal_moves.generate(board);
+		if (legal_moves.list == legal_moves.end) {
+			board.undo_null_move();
 			return get_material_eval(board);
 		}
-
-		else {
-			Undo u;
-			board.do_null_move(&u);
-			int after_pass = -find_g(board, depth - 1, -beta, -alpha);
-			board.undo_null_move();
-			return after_pass;
-		}
+		int after_pass = -find_g(board, depth - 1, -beta, -alpha);
+		board.undo_null_move();
+		return after_pass;
 	}
 
 	Square s;
@@ -295,9 +364,13 @@ int play_r(Position& board1, int sd, bool rand) {
 	MoveList legal_moves;
 	legal_moves.generate(board1);
 	if (legal_moves.list == legal_moves.end) {
-		if (board1.get_passed()) { return get_material_eval(board1); }
 		Undo u1;
 		board1.do_null_move(&u1);
+		legal_moves.generate(board1);
+		if (legal_moves.list == legal_moves.end) {
+			board1.undo_null_move();
+			return get_material_eval(board1);
+		}
 		int r = -play_r(board1, sd, !rand);
 		board1.undo_null_move();
 		return r;
@@ -336,9 +409,13 @@ int play_g(Position& board1, int sd, bool rand) {
 	MoveList legal_moves;
 	legal_moves.generate(board1);
 	if (legal_moves.list == legal_moves.end) {
-		if (board1.get_passed()) { return get_material_eval(board1); }
 		Undo u1;
 		board1.do_null_move(&u1);
+		legal_moves.generate(board1);
+		if (legal_moves.list == legal_moves.end) {
+			board1.undo_null_move();
+			return get_material_eval(board1);
+		}
 		int r = -play_g(board1, sd, !rand);
 		board1.undo_null_move();
 		return r;
@@ -377,9 +454,13 @@ int play_n(Position& board1, Position& board2, int sd) {
 	MoveList legal_moves;
 	legal_moves.generate(board1);
 	if (legal_moves.list == legal_moves.end) {
-		if (board1.get_passed()) { return get_material_eval(board1); }
 		Undo u1, u2;
 		board1.do_null_move(&u1);
+		legal_moves.generate(board1);
+		if (legal_moves.list == legal_moves.end) {
+			board1.undo_null_move();
+			return get_material_eval(board1);
+		}
 		board2.do_null_move(&u2);
 		int r = -play_n(board2, board1, sd);
 		board1.undo_null_move();
@@ -387,7 +468,7 @@ int play_n(Position& board1, Position& board2, int sd) {
 		return r;
 	}
 	else {
-		if (board1.get_count(EMPTY) < 9) {
+		if (board1.get_count_empty() < 9) {
 			return find_best(board1, 64, EVAL_MIN, EVAL_MAX);
 		}
 
@@ -437,17 +518,19 @@ void test_thread(Net* n1, Net* n2,
 			MoveList legal_moves;
 			legal_moves.generate(board1);
 			if (legal_moves.list == legal_moves.end) {
-				if (board1.get_passed()) { break; }
 				board1.do_null_fast();
 			}
 			else {
 				Square m = legal_moves.list[rng.get() % legal_moves.length()];
-				board1.do_move_fast(m);
+				Bitboard c;
+				board1.do_move_fast(m, &c);
 			}
 		}
 
-		if (board1.get_passed()) {
-			MoveList legal_moves;
+		MoveList legal_moves;
+		legal_moves.generate(board1);
+		if (legal_moves.list == legal_moves.end) {
+			board1.do_null_fast();
 			legal_moves.generate(board1);
 			if (legal_moves.list == legal_moves.end) {
 				i--;

@@ -15,7 +15,6 @@ void get_time(istringstream& ss, Color c, float& time, int& max_ply);
 
 void search_start(Thread* t, float time, int max_ply);
 
-extern bool stop_if_mate;
 extern bool ponder;
 extern atomic<bool> ponder_continue;
 

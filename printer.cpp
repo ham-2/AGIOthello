@@ -13,7 +13,7 @@ void printer(float time, atomic<bool>* stop, condition_variable* cv)
 	int score = 0;
 	int max_depth = 0;
 	int currdepth;
-	int nodes;
+	uint64_t nodes;
 	mutex mu;
 
 	// Move Generation
@@ -55,7 +55,8 @@ void printer(float time, atomic<bool>* stop, condition_variable* cv)
 		Threads.acquire_cout();
 		cout << "info time " << search_time.count() << " depth " << max_depth
 			<< " currmove " << move(probe.nmove) << " score " << eval_print(probe.eval)
-			<< " nodes " << nodes << " pv " << buf.str() << endl;
+			<< " nodes " << nodes << " nps " << int(double(nodes * 1000) / (1 + search_time.count()))
+			<< " pv " << buf.str() << endl;
 		Threads.release_cout();
 
 		if (*stop) { break; }

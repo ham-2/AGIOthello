@@ -7,8 +7,6 @@
 
 using namespace std;
 
-bool stop_if_mate = false;
-
 bool ponder = false;
 atomic<bool> ponder_continue(false);
 
@@ -17,7 +15,7 @@ int multipv = 1;
 void get_time(istringstream& ss, Color c, float& time, int& max_ply) {
 	string word;
 	time = 1.0f;
-	max_ply = 60;
+	max_ply = 100;
 	while (ss >> word) {
 		if (word == "wtime") {
 			ss >> word;
@@ -73,34 +71,41 @@ void search_start(Thread* t, float time, int max_ply)
 	Main_TT.increment();
 
 	thread print_t = thread(printer, time, complete, print_cond);
-
-	Main_TT.clear_entry(board->get_key());
-	Threads.depth.exchange(1);
+	TTEntry probe = {};
+	Main_TT.probe(board->get_key(), &probe);
+	Threads.depth.exchange(is_miss(&probe, board->get_key()) ? 1 : probe.depth);
 
 	// Start parallel search
 	Threads.t_wait.notify_all();
 	Threads.threads[0]->m.lock();
 
-	TTEntry probe = {};
-	Main_TT.probe(board->get_key(), &probe);
-
+	int window_a = 2 << (EVAL_BITS - 6);
+	int window_b = 2 << (EVAL_BITS - 6);
+	int window_c = probe.eval;
+	
 	while (Threads.depth <= max_ply) {
-		alpha_beta(*board, &(Threads.stop),
-			Threads.depth, &probe, t->step);
+		window_c = alpha_beta(*board, &(Threads.stop),
+			Threads.depth, &probe, t->step, 
+			window_c - window_a,
+			window_c + window_b);
 			
 		// Forced Stop
 		if (Threads.stop) { break; }
 
-		Main_TT.probe(board->get_key(), &probe);
-
-		// Stop if mate
-		if (stop_if_mate && is_mate(probe.eval)) {
-			break;
+		if (probe.type == 1) {
+			window_a *= 4;
 		}
+		if (probe.type == -1) {
+			window_b *= 4;
+		}
+		if (probe.type == 0) {
+			// Print and search again
+			Threads.depth++;
+			print_cond->notify_all();
 
-		// Print and search again
-		Threads.depth++;
-		print_cond->notify_all();
+			window_a = 2 << (EVAL_BITS - 6);
+			window_b = 2 << (EVAL_BITS - 6);
+		}
 	}
 
 	// terminate print thread
@@ -119,7 +124,7 @@ void search_start(Thread* t, float time, int max_ply)
 	Threads.release_cout();
 
 	// Ponder
-	if (ponder_continue && !(stop_if_mate && is_mate(probe.eval)))
+	if (ponder_continue)
 	{
 		Threads.do_move(bmove);
 		//Threads.depth--;

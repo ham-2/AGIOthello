@@ -15,12 +15,12 @@ int eval(Position& board) {
 
 	int v[SIZE_OUT];
 	board.get_eval(v);
-	int score = v[0] * board.get_count(EMPTY)
-		+ v[1] * (64 - board.get_count(EMPTY));
+	int score = v[0] * board.get_count_empty()
+		+ v[1] * (64 - board.get_count_empty());
 	score >>= 6;
 
-	score = score > EVAL_MAX ? EVAL_MAX :
-		score < EVAL_MIN ? EVAL_MIN : score;
+	score = score > EVAL_END ? EVAL_END :
+		score < -EVAL_END ? -EVAL_END : score;
 
 	return score;
 }

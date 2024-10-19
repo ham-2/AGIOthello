@@ -15,7 +15,7 @@
 using namespace std;
 
 // Move Generation / Position Benchmarks
-void perft(Position* board, int depth);
+void perft(Position* board, int depth, bool fast);
 void solve();
 
 // Evaluation Benchmarks

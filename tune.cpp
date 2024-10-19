@@ -147,7 +147,7 @@ void backpropagate(Net_train* dst, Position* board,
 	int P[SIZE_OUT];
 	int PS;
 
-	float mg = float(board->get_count(EMPTY)) / 64;
+	float mg = float(board->get_count_empty()) / 64;
 	float eg = 1 - mg;
 
 	float dPdP3R[SIZE_F3];
@@ -225,19 +225,19 @@ int _play_rand(Position* board, PRNG* rng_)
 	legal_moves.generate(*board);
 
 	if (legal_moves.list == legal_moves.end) {
-		if (board->get_passed()) {
+		board->do_null_fast();
+		legal_moves.generate(*board);
+		board->undo_null_fast();
+		if (legal_moves.list == legal_moves.end) {
 			return 0;
 		}
-
-		else {
-			board->do_null_fast();
-			return 1;
-		}
+		return 1;
 	}
 
 	else {
 		Square s = legal_moves.list[rng.get() % legal_moves.length()];
-		board->do_move_fast(s);
+		Bitboard c;
+		board->do_move_fast(s, &c);
 		return 1;
 	}
 }
@@ -255,18 +255,19 @@ int _play_best(Position* board, int find_depth, bool side, PBS* p)
 	legal_moves.generate(*board);
 	int score_true;
 
-	if (board->get_count(EMPTY) < SOLVE_DEPTH) { find_depth = SOLVE_DEPTH; }
+	if (board->get_count_empty() < SOLVE_DEPTH) { find_depth = SOLVE_DEPTH; }
 
-	if (legal_moves.list == legal_moves.end) {
-		if (board->get_passed()) { 
-			score_true = get_material(*board);
-			score_true = score_true > 0 ? EVAL_ALL :
-				score_true < 0 ? EVAL_NONE : 0;
-			return score_true;
-		}
-		
+	if (legal_moves.list == legal_moves.end) {	
 		Undo u1, u2;
 		board->do_null_move(&u1);
+		legal_moves.generate(*board);
+		if (legal_moves.list == legal_moves.end) {
+			board->undo_null_move();
+			score_true = get_material(*board);
+			//score_true = score_true > 0 ? EVAL_ALL :
+			//	score_true < 0 ? EVAL_NONE : 0;
+			return score_true;
+		}
 		score_true = -_play_best(board, find_depth, !side, p);
 		board->undo_null_move();
 	}
