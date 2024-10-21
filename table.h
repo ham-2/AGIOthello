@@ -52,7 +52,7 @@ struct TT {
 	void increment() { tt_sn++; }
 };
 
-void getpv(ostream& os, Position* board, int& depth, Square last = A1);
+void getpv(ostream& os, Position* board);
 
 inline bool is_miss(TTEntry* src, Key key) {
 	return key != src->key;

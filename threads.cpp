@@ -130,22 +130,10 @@ void Threadmgr::set_weights() {
 }
 
 void Threadmgr::do_move(Square m) {
-	Undo* u = new Undo;
-	board->do_move_wrap(m, u);
+	Bitboard c;
+	board->do_move_wrap(m, &c);
 	for (int i = 0; i < threads.size(); i++) {
-		Undo* u = new Undo;
-		threads[i]->board->do_move_wrap(m, u);
-	}
-}
-
-void Threadmgr::undo_move() {
-	Undo* u = board->get_stack();
-	board->undo_move();
-	delete u;
-	for (int i = 0; i < threads.size(); i++) {
-		Undo* u = board->get_stack();
-		threads[i]->board->undo_move();
-		delete u;
+		threads[i]->board->do_move_wrap(m, &c);
 	}
 }
 
@@ -156,13 +144,12 @@ void Threadmgr::test_eval() {
 	MoveList ml;
 	ml.generate(*board);
 	if (ml.list == ml.end) {
-		Undo u;
-		board->do_null_move(&u);
+		board->pass();
 		ml.generate(*board);
 		if (ml.list == ml.end) {
 			endeval ^= EVAL_END;
 		}
-		board->undo_null_move();
+		board->pass();
 	}
 	
 	cout << "Material: " << eval_print(get_material(*board) ^ EVAL_END)

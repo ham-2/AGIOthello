@@ -203,9 +203,9 @@ void backpropagate(Net_train* dst, Position* board,
 	Piece us = board->get_side() ? WHITE_P : BLACK_P;
 
 	for (Square s = A1; s < SQ_END; ++s) {
-		if (board->get_piece(s) == EMPTY) { continue; }
+		if (board->get_pieces(EMPTY) & SquareBoard[s]) { continue; }
 
-			int addr = board->get_piece(s) == us ?
+			int addr = board->get_pieces(us) & SquareBoard[s] ?
 			s * SIZE_F1 : s * SIZE_F1 + L0_OFFSET;
 			
 			for (int i = 0; i < SIZE_F1; i += 8) {
@@ -225,9 +225,9 @@ int _play_rand(Position* board, PRNG* rng_)
 	legal_moves.generate(*board);
 
 	if (legal_moves.list == legal_moves.end) {
-		board->do_null_fast();
+		board->pass();
 		legal_moves.generate(*board);
-		board->undo_null_fast();
+		board->pass();
 		if (legal_moves.list == legal_moves.end) {
 			return 0;
 		}
@@ -237,7 +237,7 @@ int _play_rand(Position* board, PRNG* rng_)
 	else {
 		Square s = legal_moves.list[rng.get() % legal_moves.length()];
 		Bitboard c;
-		board->do_move_fast(s, &c);
+		board->do_move(s, &c);
 		return 1;
 	}
 }
@@ -249,7 +249,7 @@ struct PBS {
 	PRNG* r;
 };
 
-int _play_best(Position* board, int find_depth, bool side, PBS* p)
+int _play_best(Position* board, int find_depth, PBS* p)
 {
 	MoveList legal_moves;
 	legal_moves.generate(*board);
@@ -258,18 +258,17 @@ int _play_best(Position* board, int find_depth, bool side, PBS* p)
 	if (board->get_count_empty() < SOLVE_DEPTH) { find_depth = SOLVE_DEPTH; }
 
 	if (legal_moves.list == legal_moves.end) {	
-		Undo u1, u2;
-		board->do_null_move(&u1);
+		board->pass();
 		legal_moves.generate(*board);
 		if (legal_moves.list == legal_moves.end) {
-			board->undo_null_move();
+			board->pass();
 			score_true = get_material(*board);
 			//score_true = score_true > 0 ? EVAL_ALL :
 			//	score_true < 0 ? EVAL_NONE : 0;
 			return score_true;
 		}
-		score_true = -_play_best(board, find_depth, !side, p);
-		board->undo_null_move();
+		score_true = -_play_best(board, find_depth, p);
+		board->pass();
 	}
 
 	else {
@@ -280,8 +279,8 @@ int _play_best(Position* board, int find_depth, bool side, PBS* p)
 
 		for (int i = 0; i < legal_moves.length(); i++) {
 			s = legal_moves.list[i];
-			Undo u;
-			board->do_move(s, &u);
+			Bitboard c;
+			board->do_move(s, &c);
 			comp_eval = -find_best(*board, find_depth,
 				EVAL_MIN, -new_eval);
 
@@ -289,13 +288,13 @@ int _play_best(Position* board, int find_depth, bool side, PBS* p)
 				new_eval = comp_eval;
 				nmove = s;
 			}
-			board->undo_move();
+			board->undo_move(s, &c);
 		}
 
-		Undo u1, u2;
-		board->do_move(nmove, &u1);
-		score_true = -_play_best(board, find_depth, !side, p);
-		board->undo_move();
+		Bitboard c;
+		board->do_move(nmove, &c);
+		score_true = -_play_best(board, find_depth, p);
+		board->undo_move(nmove, &c);
 	}
 
 	backpropagate(p->dst_, board,
@@ -327,11 +326,10 @@ void _do_learning_thread(Net_train* src,
 				_play_rand(board, p) > 0) {
 				depth++;
 			}
-			board->set_squares();
 			board->set_accumulator();
 
 			PBS pb = { dst_, loss, lr, p };
-			_play_best(board, find_depth, true, &pb);
+			_play_best(board, find_depth, &pb);
 			(*games)++;
 		}
 

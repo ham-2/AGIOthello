@@ -47,13 +47,11 @@ void printer(float time, atomic<bool>* stop, condition_variable* cv)
 		TTEntry probe = {};
 		Main_TT.probe(Threads.board->get_key(), &probe);
 		stringstream buf;
-		currdepth = 0;
-		getpv(buf, Threads.board, currdepth);
-		max_depth = Threads.depth;
+		getpv(buf, Threads.board);
 
 		// Print
 		Threads.acquire_cout();
-		cout << "info time " << search_time.count() << " depth " << max_depth
+		cout << "info time " << search_time.count() << " depth " << Threads.depth
 			<< " currmove " << move(probe.nmove) << " score " << eval_print(probe.eval)
 			<< " nodes " << nodes << " nps " << int(double(nodes * 1000) / (1 + search_time.count()))
 			<< " pv " << buf.str() << endl;

@@ -105,19 +105,17 @@ void TT::change_size(size_t new_size) {
 	table = static_cast<TTEntry*>(table_malloc(TT_LENGTH * sizeof(TTEntry)));
 }
 
-void getpv(ostream& os, Position* board, int& depth, Square last) {
+void getpv(ostream& os, Position* board) {
 	string pv;
 	TTEntry probe = {};
 	Main_TT.probe(board->get_key(), &probe);
-	if (last == NULL_MOVE && probe.nmove == NULL_MOVE) { return; }
 
 	if (probe.key == board->get_key() &&
 		probe.nmove != GAME_END) {
-		Undo u;
-		board->do_move_wrap(probe.nmove, &u);
+		Bitboard c;
+		board->do_move_wrap(probe.nmove, &c);
 		os << probe.nmove << " ";
-		depth++;
-		getpv(os, board, depth, probe.nmove);
-		board->undo_move();
+		getpv(os, board);
+		board->undo_move_wrap(probe.nmove, &c);
 	}
 }

@@ -216,14 +216,6 @@ int main() {
 			Threads.release_lock();
 		}
 
-		else if (word == "undo") {
-			Threads.acquire_lock();
-			while (ss >> word) {
-				Threads.undo_move();
-			}
-			Threads.release_lock();
-		}
-
 		else if (word == "showboard") {
 			int threadidx;
 			threadidx = ss >> threadidx ? threadidx : 0;
@@ -236,18 +228,11 @@ int main() {
 		}
 
 		else if (word == "perft") {
-			ss >> word;
-			bool fast = (word[1] == 'f');
-
 			int depth;
 			ss >> depth;
 			Threads.acquire_lock();
-			perft(Threads.board, depth, fast);
+			perft(Threads.board, depth);
 			Threads.release_lock();
-		}
-
-		else if (word == "verify") {
-			Threads.board->verify();
 		}
 
 		else if (word == "solve") {

@@ -49,15 +49,13 @@ inline void zero_weights(Net* net) { memset(net, 0, sizeof(Net)); }
 void rand_weights_all(Net* net, int bits);
 void rand_weights_1(Net* net, int mm);
 
-void set_material(Net* net);
-
 int load_weights(Net* net, std::string filename);
 void save_weights(Net* net, std::string filename);
 void encode_literal(Net* net);
 void decode_literal(Net* dst, std::string* src);
 void get_stats(Net* net);
 
-void compute_L0(int16_t* dst_b, Piece* squares, Net* n);
+void compute_L0(int16_t* dst_b, Bitboard* pieces, Net* n);
 void update_L0(int16_t* dst, Square s, Piece from, Piece to, Net* n);
 template <int S, int shift, int max>
 void ReLUClip(int16_t* dst, int16_t* src);

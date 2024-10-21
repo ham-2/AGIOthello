@@ -4,14 +4,6 @@
 
 #include "position.h"
 
-void Position::pop_stack() {
-	undo_stack = undo_stack->prev;
-}
-
-void Position::clear_stack() {
-	while (undo_stack->prev != nullptr) { pop_stack(); }
-}
-
 template <int T>
 inline constexpr Bitboard add_captures(Square s, Bitboard us, Bitboard them)
 {
@@ -113,84 +105,29 @@ Bitboard Position::index_captures(Square s, Piece p) {
 #endif
 }
 
-// place/remove/move functions - dont handle key xor
-inline void Position::place(Piece p, Square s) {
-	squares[s] = p;
-	pieces[p] ^= SquareBoard[s];
-	pieces[EMPTY] ^= SquareBoard[s];
-
-	empty_count--;
-}
-
-inline void Position::remove(Piece p, Square s) {
-	squares[s] = EMPTY;
-	pieces[p] ^= SquareBoard[s];
-	pieces[EMPTY] ^= SquareBoard[s];
-
-	empty_count++;
-}
-
-void Position::rebuild() { // computes others from squares data.
-	for (int i = 0; i < 3; i++) { pieces[i] = 0; }
-	
-	// set EMPTYs to full
-	empty_count = 64;
-	pieces[EMPTY] = FullBoard;
-
-	for (Square s = A1; s < SQ_END; ++s) {
-		Piece p = squares[s];
-		if (p != EMPTY) { place(p, s); }
+template <Piece from, Piece to>
+void Position::update_() {
+	Bitboard b = acc_state[from] & pieces[to];
+	while (b) {
+		Square s = pop_lsb(&b);
+		update_L0(accumulator, s, from, to, net);
 	}
+}
+
+void Position::set_state() {
+	update_<EMPTY, BLACK_P>();
+	update_<EMPTY, WHITE_P>();
+	update_<BLACK_P, EMPTY>();
+	update_<BLACK_P, WHITE_P>();
+	update_<WHITE_P, EMPTY>();
+	update_<WHITE_P, BLACK_P>();
+
+	for (int i = 0; i < 3; i++) { acc_state[i] = pieces[i]; }
 }
 
 Position::Position(Net* n) {
 	memset(this, 0, sizeof(Position));
-	undo_stack = &(this->root);
-	undo_stack->prev = nullptr;
 	net = n;
-}
-
-Position::~Position()
-{
-	clear_stack();
-}
-
-void Position::verify() {
-	// Verify all data are consistant.
-	Position testpos(net);
-	for (int i = 0; i < 64; i++) { testpos.squares[i] = squares[i]; }
-	testpos.rebuild();
-
-	Bitboard test = EmptyBoard;
-	for (int i = 0; i < 3; i++) {
-		if (test & pieces[i]) {
-			cout << "Pieces overlap detected at " << i << endl;
-		}
-		test |= pieces[i];
-
-		if (testpos.pieces[i] != pieces[i]) {
-			cout << "Pieces inconsistent at " << i << endl;
-		}
-	}
-
-	cout << *this << "\n\n" << testpos << endl;
-}
-
-void Position::set_squares() {
-	Bitboard e = pieces[EMPTY];
-	Bitboard b = pieces[BLACK_P];
-
-	int sqc[3] = { };
-	for (Square s = A1; s < SQ_END; ++s) {
-		squares[s] = e & 1 ? EMPTY :
-			b & 1 ? BLACK_P : WHITE_P;
-
-		e >>= 1;
-		b >>= 1;
-		sqc[squares[s]]++;
-	}
-
-	empty_count = popcount(pieces[EMPTY]);
 }
 
 void Position::show() {
@@ -203,7 +140,7 @@ ostream& operator<<(ostream& os, Position& pos) {
 	for (int i = 0; i < 8; i++) {
 		os << i + 1 << '|';
 		for (int j = 0; j < 8; j++) {
-			os << print_piece(pos.squares[sq]) << '|';
+			os << print_piece(pos.get_piece(sq)) << '|';
 			++sq;
 		}
 		os << "\n-+-+-+-+-+-+-+-+-+-\n";
@@ -224,12 +161,11 @@ void Position::set(string fen) {
 	char c;
 	istringstream ss(fen);
 
-	// first clear stack
-	clear_stack();
 	Net* temp2 = net;
 	memset(this, 0, sizeof(Position));
-	undo_stack = &(this->root);
 	net = temp2;
+	pieces[EMPTY] = FullBoard;
+	empty_count = 64;
 
 	// set pieces from rank 8.
 	ss >> noskipws >> c;
@@ -240,7 +176,11 @@ void Position::set(string fen) {
 			sq += (c - '0');
 		}
 		else if (parse_piece(c, p)) {
-			squares[sq] = p;
+			if (p != EMPTY) {
+				pieces[p] ^= SquareBoard[sq];
+				pieces[EMPTY] ^= SquareBoard[sq];
+				empty_count--;
+			}
 			++sq;
 		}
 		ss >> c;
@@ -252,90 +192,23 @@ void Position::set(string fen) {
 	ss >> c;
 
 	// write other data
-	undo_stack->captured = EmptyBoard;
-	compute_L0(undo_stack->accumulator, squares, net);
-
-	rebuild();
+	set_accumulator();
 }
 
-void Position::do_move(Square s, Undo* new_undo) {
-	memcpy(new_undo, undo_stack, sizeof(Undo));
-	new_undo->s = s;
-	new_undo->prev = undo_stack;
-	
-	undo_stack = new_undo;
-
-	// Handle captures
-	Piece p = side_to_move ? WHITE_P : BLACK_P;
-	Bitboard captures = index_captures(s, p);
-
-	pieces[~p] ^= captures;
-	pieces[p] ^= captures;
-
-	new_undo->captured = captures;
-	while (captures) {
-		Square c = pop_lsb(&captures);
-		
-		update_L0(new_undo->accumulator, c, ~p, p, net);
-
-		squares[c] = p;
-	}
-
-	// Place the new piece
-	update_L0(new_undo->accumulator, s, EMPTY, p, net);
-
-	place(p, s);
-	
-	side_to_move = ~side_to_move;
+void Position::do_move_wrap(Square s, Bitboard* captures) {
+	if (s == NULL_MOVE) { pass(); }
+	else { do_move(s, captures); }
 }
 
-void Position::undo_move() {
-	Square s = undo_stack->s;
-	if (s == NULL_MOVE) { undo_null_move(); return; }
-
-	Piece p = side_to_move ? WHITE_P : BLACK_P; // Piece to place again
-	Bitboard captured = undo_stack->captured;
-
-	pieces[~p] ^= captured;
-	pieces[p] ^= captured;
-	remove(~p, s);
-
-	while (captured) {
-		Square c = pop_lsb(&captured);
-		squares[c] = p;
-	}
-
-	side_to_move = ~side_to_move;
-	pop_stack();
+void Position::undo_move_wrap(Square s, Bitboard* captures) {
+	if (s == NULL_MOVE) { pass(); }
+	else { undo_move(s, captures); }
 }
 
-void Position::do_null_move(Undo* new_undo) {
-	memcpy(new_undo, undo_stack, sizeof(Undo));
-	new_undo->s = NULL_MOVE;
-	new_undo->prev = undo_stack;
-
-	undo_stack = new_undo;
-
-	side_to_move = ~side_to_move;
-
-	new_undo->captured = EMPTY;
-}
-
-void Position::undo_null_move() {
-	side_to_move = ~side_to_move;
-	pop_stack();
-}
-
-void Position::do_move_wrap(Square s, Undo* new_undo) {
-	if (s == NULL_MOVE) { do_null_move(new_undo); }
-	else { do_move(s, new_undo); }
-}
-
-void Position::do_move_fast(Square s, Bitboard* captures) {
+void Position::do_move(Square s, Bitboard* captures) {
 	Piece p = side_to_move ? WHITE_P : BLACK_P;
 	*captures = index_captures(s, p);
 	
-
 	pieces[~p] ^= *captures;
 	pieces[p] ^= *captures ^ SquareBoard[s];
 	pieces[EMPTY] ^= SquareBoard[s];
@@ -343,11 +216,7 @@ void Position::do_move_fast(Square s, Bitboard* captures) {
 	side_to_move = ~side_to_move;
 }
 
-void Position::do_null_fast() {
-	side_to_move = ~side_to_move;
-}
-
-void Position::undo_move_fast(Square s, Bitboard* captures)
+void Position::undo_move(Square s, Bitboard* captures)
 {
 	Piece p = side_to_move ? WHITE_P : BLACK_P; // Piece to place again
 
@@ -358,18 +227,9 @@ void Position::undo_move_fast(Square s, Bitboard* captures)
 	side_to_move = ~side_to_move;
 }
 
-void Position::undo_null_fast()
-{
-	side_to_move = ~side_to_move;
-}
-
 Position& Position::operator=(const Position& board) {
 	Net* temp = net;
-	clear_stack();
 	memcpy(this, &board, sizeof(Position));
-	undo_stack = &root;
-	memcpy(undo_stack, board.undo_stack, sizeof(Undo));
-	undo_stack->prev = nullptr;
 	net = temp;
 	return *this;
 }

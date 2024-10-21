@@ -14,12 +14,11 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 
 	// No legal moves
 	if (legal_moves.list == legal_moves.end) {
-		Undo u;
-		board.do_null_move(&u);
+		board.pass();
 
 		legal_moves.generate(board);
 		if (legal_moves.list == legal_moves.end) {
-			board.undo_null_move();
+			board.pass();
 			int score = get_material_eval(board);
 			probe->type = 0;
 			Main_TT.register_entry(root_key, score, GAME_END, 0, 0);
@@ -35,7 +34,7 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 			ply - 1, &probe_m, step,
 			-beta, -alpha
 		);
-		board.undo_null_move();
+		board.pass();
 
 		probe->type = -probe_m.type;
 		if (!(*stop)) {
@@ -70,8 +69,8 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 				s = *(legal_moves.list + index);
 
 				// Do move
-				Undo u;
-				board.do_move(s, &u);
+				Bitboard c;
+				board.do_move(s, &c);
 				TTEntry probe_m;
 
 				// Probe Table and Search
@@ -88,14 +87,14 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 						new_eval = comp_eval;
 						alpha = comp_eval;
 						nmove = s;
-						board.undo_move();
+						board.undo_move(s, &c);
 						probe->type = -1;
 						break;
 					} // Prune
 					if (probe_m.depth >= ply - 1 &&
 						comp_eval < new_eval &&
 						probe_m.type != 1) {
-						board.undo_move();
+						board.undo_move(s, &c);
 						i++;
 						index += step;
 						continue;
@@ -133,14 +132,14 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 					if (new_eval > alpha) { 
 						alpha = new_eval;
 						if (alpha >= beta) {
-							board.undo_move();
+							board.undo_move(s, &c);
 							probe->type = -1;
 							break;
 						}
 					}
 				}
 
-				board.undo_move();
+				board.undo_move(s, &c);
 				i++;
 				index += step;
 			}

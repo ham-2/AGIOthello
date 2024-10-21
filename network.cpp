@@ -192,7 +192,7 @@ void _add_L0(int16_t* dst, int addr, Net* n) {
 // US   : sq * SIZE_F1 + i
 // THEM : sq * SIZE_F1 + i + L0_OFFSET;
 
-void compute_L0(int16_t* dst_b, Piece* squares, Net* n) {
+void compute_L0(int16_t* dst_b, Bitboard* pieces, Net* n) {
 	
 	int16_t* dst_w = dst_b + SIZE_F1;
 	
@@ -203,11 +203,11 @@ void compute_L0(int16_t* dst_b, Piece* squares, Net* n) {
 	}
 
 	for (int s = A1; s < SQ_END; ++s) {
-		if (squares[s] == BLACK_P) {
+		if (SquareBoard[s] & pieces[BLACK_P]) {
 			_add_L0(dst_b, s * SIZE_F1            , n);
 			_add_L0(dst_w, s * SIZE_F1 + L0_OFFSET, n);
 		}
-		else if (squares[s] == WHITE_P) {
+		else if (SquareBoard[s] & pieces[WHITE_P]) {
 			_add_L0(dst_b, s * SIZE_F1 + L0_OFFSET, n);
 			_add_L0(dst_w, s * SIZE_F1            , n);
 		}
