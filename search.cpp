@@ -73,7 +73,7 @@ void search_start(Thread* t, float time, int max_ply)
 	thread print_t = thread(printer, time, complete, print_cond);
 	TTEntry probe = {};
 	Main_TT.probe(board->get_key(), &probe);
-	Threads.depth.exchange(is_miss(&probe, board->get_key()) ? 1 : probe.depth);
+	Threads.depth.exchange(1);
 
 	// Start parallel search
 	Threads.t_wait.notify_all();
@@ -105,6 +105,10 @@ void search_start(Thread* t, float time, int max_ply)
 
 			window_a = 2 << (EVAL_BITS - 6);
 			window_b = 2 << (EVAL_BITS - 6);
+			if (Threads.depth == board->get_count_empty()) {
+				window_a += window_c < 0 ? EVAL_END : 0;
+				window_b += window_c > 0 ? EVAL_END : 0;
+			}
 		}
 	}
 

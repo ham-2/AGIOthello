@@ -205,7 +205,8 @@ void Position::undo_move_wrap(Square s, Bitboard* captures) {
 	else { undo_move(s, captures); }
 }
 
-void Position::do_move(Square s, Bitboard* captures) {
+void Position::do_move(Square s, Bitboard* captures) 
+{
 	Piece p = side_to_move ? WHITE_P : BLACK_P;
 	*captures = index_captures(s, p);
 	

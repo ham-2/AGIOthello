@@ -50,6 +50,8 @@ struct TT {
 	void clear();
 	void change_size(size_t new_size);
 	void increment() { tt_sn++; }
+
+	void check_full();
 };
 
 void getpv(ostream& os, Position* board);

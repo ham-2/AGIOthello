@@ -154,6 +154,7 @@ void backpropagate(Net_train* dst, Position* board,
 	float dPdP2R[SIZE_F2];
 	float dPdP1R[SIZE_F1];
 
+	board->set_state();
 	int16_t* acc = board->get_accumulator() + (board->get_side() ? SIZE_F1 : 0);
 	Net* n = board->get_net();
 

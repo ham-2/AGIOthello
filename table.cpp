@@ -105,12 +105,24 @@ void TT::change_size(size_t new_size) {
 	table = static_cast<TTEntry*>(table_malloc(TT_LENGTH * sizeof(TTEntry)));
 }
 
+void TT::check_full()
+{
+	uint64_t count = 0;
+	for (int i = 0; i < TT_LENGTH; i++) {
+		if ((table + i)->key != 0) { count++; }
+	}
+
+	cout << "TTFull: " << double(count) * 100 / TT_LENGTH << "% "
+		<< '(' << count << '/' << TT_LENGTH << ')' << endl;
+}
+
 void getpv(ostream& os, Position* board) {
 	string pv;
 	TTEntry probe = {};
 	Main_TT.probe(board->get_key(), &probe);
 
 	if (probe.key == board->get_key() &&
+		probe.nmove != SQ_END &&
 		probe.nmove != GAME_END) {
 		Bitboard c;
 		board->do_move_wrap(probe.nmove, &c);

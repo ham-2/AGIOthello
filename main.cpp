@@ -265,6 +265,10 @@ int main() {
 			rand_weights_1(Threads.n, stoi(word));
 			Threads.set_weights();
 		}
+
+		else if (word == "hashfull") {
+			Main_TT.check_full();
+		}
 	}
 
 	return 44;

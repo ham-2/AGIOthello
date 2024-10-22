@@ -27,10 +27,10 @@ private:
 
 	template <Piece from, Piece to>
 	void update_();
-	void set_state();
 
 public:
 	Position(Net* n);
+	void set_state();
 
 	inline Key get_key() { return 
 		side_to_move ? hash_128i(~pieces[EMPTY], pieces[BLACK_P]) 

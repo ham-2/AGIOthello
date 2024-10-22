@@ -68,19 +68,21 @@ int _solve(int depth, int alpha, int beta, int& type) {
 	if (legal_moves.list == legal_moves.end) {
 		Threads.board->pass();
 		legal_moves.generate(*Threads.board);
+
 		if (legal_moves.list == legal_moves.end) {
 			Threads.board->pass();
 			int score = get_material_eval(*Threads.board);
 			type = 0;
-			Main_TT.register_entry(root_key, score, GAME_END, 64, 0);
+			Main_TT.register_entry(root_key, score, GAME_END, 0, 0);
 			return score;
 		}
 
 		int type_;
 		int after_pass = -_solve(depth - 1, -beta, -alpha, type_);
 		Threads.board->pass();
+
 		type = -type_;
-		Main_TT.register_entry(root_key, after_pass, NULL_MOVE, 64 + depth, type);
+		Main_TT.register_entry(root_key, after_pass, NULL_MOVE, depth + 1, type);
 		return after_pass;
 	}
 
@@ -90,6 +92,7 @@ int _solve(int depth, int alpha, int beta, int& type) {
 		Square nmove = NULL_MOVE;
 		int comp_eval;
 		int new_eval = EVAL_INIT;
+		int alpha_i = alpha;
 
 		int i = 0;
 		type = 0;
@@ -106,13 +109,13 @@ int _solve(int depth, int alpha, int beta, int& type) {
 				if (comp_eval >= beta &&
 					probe.type != -1) {
 					new_eval = comp_eval;
+					alpha = comp_eval;
 					nmove = s;
 					type = -1;
-					alpha = beta;
 					Threads.board->undo_move(s, &c);
 					break;
 				}
-				if (comp_eval < alpha &&
+				if (comp_eval < new_eval &&
 					probe.type != 1) {
 					Threads.board->undo_move(s, &c);
 					i++;
@@ -128,12 +131,11 @@ int _solve(int depth, int alpha, int beta, int& type) {
 				nmove = s;
 				if (new_eval > alpha) {
 					alpha = new_eval;
-				}
-				if (alpha >= beta) {
-					type = -1;
-					alpha = beta;
-					Threads.board->undo_move(s, &c);
-					break;
+					if (alpha >= beta) {
+						type = -1;
+						Threads.board->undo_move(s, &c);
+						break;
+					}
 				}
 			}
 
@@ -141,9 +143,9 @@ int _solve(int depth, int alpha, int beta, int& type) {
 			i++;
 		}
 
-		if (new_eval < alpha) { type = 1; }
+		if (alpha == alpha_i) { type = 1; }
 
-		Main_TT.register_entry(root_key, alpha, nmove, 64 + depth, type);
+		Main_TT.register_entry(root_key, alpha, nmove, depth + 1, type);
 
 		return alpha;
 	}
