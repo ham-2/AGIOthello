@@ -12,7 +12,6 @@ void printer(float time, atomic<bool>* stop, condition_variable* cv)
 	Square bmove = NULL_MOVE;
 	int score = 0;
 	int max_depth = 0;
-	int currdepth;
 	uint64_t nodes;
 	mutex mu;
 

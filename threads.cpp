@@ -12,6 +12,10 @@ void lazy_smp(Thread* t) {
 	int currdepth;
 	TTEntry probe = {};
 
+	SearchParams sp = {
+		t->board, &Threads.stop, &Main_TT, t->step
+	};
+
 	while (!(t->kill)) {
 		unique_lock<mutex> m(t->m);
 		Threads.t_wait.wait(m);
@@ -20,8 +24,7 @@ void lazy_smp(Thread* t) {
 			currdepth = Threads.depth + 1;
 
 			Main_TT.probe(t->board->get_key(), &probe);
-			alpha_beta(*(t->board), &Threads.stop,
-				currdepth, &probe, t->step);
+			alpha_beta(&sp, &probe, currdepth);
 		}
 	}
 

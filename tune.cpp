@@ -248,6 +248,7 @@ struct PBS {
 	atomic<double>* loss_curr;
 	double lr;
 	PRNG* r;
+	TT* table;
 };
 
 int _play_best(Position* board, int find_depth, PBS* p)
@@ -264,8 +265,6 @@ int _play_best(Position* board, int find_depth, PBS* p)
 		if (legal_moves.list == legal_moves.end) {
 			board->pass();
 			score_true = get_material(*board);
-			//score_true = score_true > 0 ? EVAL_ALL :
-			//	score_true < 0 ? EVAL_NONE : 0;
 			return score_true;
 		}
 		score_true = -_play_best(board, find_depth, p);
@@ -278,18 +277,51 @@ int _play_best(Position* board, int find_depth, PBS* p)
 		int comp_eval;
 		int new_eval = EVAL_INIT;
 
-		for (int i = 0; i < legal_moves.length(); i++) {
-			s = legal_moves.list[i];
-			Bitboard c;
-			board->do_move(s, &c);
-			comp_eval = -find_best(*board, find_depth,
-				EVAL_MIN, -new_eval);
+		if (find_depth < 0) {
+			for (int i = 0; i < legal_moves.length(); i++) {
+				s = legal_moves.list[i];
+				Bitboard c;
+				board->do_move(s, &c);
+				comp_eval = -find_best(*board, find_depth,
+					EVAL_MIN, -new_eval);
 
-			if (comp_eval > new_eval) {
-				new_eval = comp_eval;
-				nmove = s;
+				if (comp_eval > new_eval) {
+					new_eval = comp_eval;
+					nmove = s;
+				}
+				board->undo_move(s, &c);
 			}
-			board->undo_move(s, &c);
+		}
+		else {
+			SearchParams sp = { board, &(Threads.stop), p->table, 1 };
+			p->table->increment();
+			TTEntry entry = {};
+			Key root_key = board->get_key();
+			p->table->probe(root_key, &entry);
+			int window_c = is_miss(&entry, root_key) ? 0 : entry.eval;
+			int window_a = 2 << (EVAL_BITS - 6);
+			int window_b = 2 << (EVAL_BITS - 6);
+			do {
+				window_c = alpha_beta(&sp,
+					&entry, find_depth + 1,
+					window_c - window_a,
+					window_c + window_b);
+				if (entry.type == 1) {
+					window_a += 2 << (EVAL_BITS - 6);
+				}
+				if (entry.type == -1) {
+					window_b += 2 << (EVAL_BITS - 6);
+				}
+			} while (entry.type != 0 && !Threads.stop);
+			p->table->probe(root_key, &entry);
+
+			if (is_miss(&entry, root_key)) {
+				p->table->clear_entry(root_key);
+				alpha_beta(&sp, &entry, 1);
+				p->table->probe(root_key, &entry);
+			}
+
+			nmove = *(legal_moves.list + legal_moves.find_index(entry.nmove));
 		}
 
 		Bitboard c;
@@ -298,9 +330,11 @@ int _play_best(Position* board, int find_depth, PBS* p)
 		board->undo_move(nmove, &c);
 	}
 
-	backpropagate(p->dst_, board,
-		score_true,
-		p->loss_curr, p->lr);
+	if (!Threads.stop) {
+		backpropagate(p->dst_, board,
+			score_true,
+			p->loss_curr, p->lr);
+	}
 
 	return score_true;
 }
@@ -314,6 +348,8 @@ void _do_learning_thread(Net_train* src,
 	Net_train* dst_ = new Net_train;
 
 	Position* board = new Position(tmp);
+
+	TT* table = new TT;
 
 	while (!(*stop)) {
 		copy_float(src_, src);
@@ -329,7 +365,8 @@ void _do_learning_thread(Net_train* src,
 			}
 			board->set_accumulator();
 
-			PBS pb = { dst_, loss, lr, p };
+			table->clear();
+			PBS pb = { dst_, loss, lr, p, table };
 			_play_best(board, find_depth, &pb);
 			(*games)++;
 		}
@@ -341,6 +378,7 @@ void _do_learning_thread(Net_train* src,
 	delete tmp;
 	delete src_;
 	delete dst_;
+	delete table;
 }
 
 void do_learning(Net_train* src,

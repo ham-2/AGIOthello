@@ -1,45 +1,48 @@
 #include "alphabeta.h"
 
-int alpha_beta(Position& board, atomic<bool>* stop,
-	int ply, TTEntry* probe, int step,
-	int alpha, int beta) 
+int alpha_beta(SearchParams* sp, TTEntry* probe,
+	int ply, int alpha, int beta) 
 {
+	Position* board = sp->board;
+	atomic<bool>* stop = sp->stop;
+	TT* table = sp->table;
+	int step = sp->step;
+
 	if (*stop) { return EVAL_FAIL; }
 
 	// Move generation
 	MoveList legal_moves;
-	legal_moves.generate(board);
+	legal_moves.generate(*board);
 
-	Key root_key = board.get_key();
+	Key root_key = board->get_key();
 
 	// No legal moves
 	if (legal_moves.list == legal_moves.end) {
-		board.pass();
-		legal_moves.generate(board);
+		board->pass();
+		legal_moves.generate(*board);
 
 		if (legal_moves.list == legal_moves.end) {
-			board.pass();
+			board->pass();
 			node_count++;
-			int score = get_material_eval(board);
+			int score = get_material_eval(*board);
 			probe->type = 0;
-			Main_TT.register_entry(root_key, score, GAME_END, 0, 0);
+			table->register_entry(root_key, score, GAME_END, 0, 0);
 			return score;
 		}
 
 		TTEntry probe_m = {};
-		Main_TT.probe(board.get_key(), &probe_m);
+		table->probe(board->get_key(), &probe_m);
 
 		int after_pass = -alpha_beta
 		(
-			board, stop,
-			ply - 1, &probe_m, step,
-			-beta, -alpha
+			sp, &probe_m,
+			ply - 1, -beta, -alpha
 		);
-		board.pass();
+		board->pass();
 
 		probe->type = -probe_m.type;
 		if (!(*stop)) {
-			Main_TT.register_entry(root_key, after_pass, NULL_MOVE, ply, probe->type);
+			table->register_entry(root_key, after_pass, NULL_MOVE, ply, probe->type);
 		}
 		return after_pass;
 	}
@@ -48,15 +51,15 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 	else {
 		
 		if (ply <= 0) { 
-			if (is_mate(alpha) || is_mate(beta)) {
-				ply = 1;
-			}
-			else {
+			//if (is_mate(alpha) || is_mate(beta)) {
+			//	ply = 1;
+			//}
+			//else {
 				probe->type = 0;
-				int score = eval(board);
-				Main_TT.register_entry(root_key, score, SQ_END, 0, 0);
+				int score = eval(*board);
+				table->register_entry(root_key, score, SQ_END, 0, 0);
 				return score;
-			}
+			//}
 		}
 
 		Square s;
@@ -75,12 +78,12 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 
 			// Do move
 			Bitboard c;
-			board.do_move(s, &c);
+			board->do_move(s, &c);
 			TTEntry probe_m;
 
 			// Probe Table and Search
-			Main_TT.probe(board.get_key(), &probe_m);
-			if (is_miss(&probe_m, board.get_key()))
+			table->probe(board->get_key(), &probe_m);
+			if (is_miss(&probe_m, board->get_key()))
 			{ // Table Miss
 				reduction = 0;
 			}
@@ -92,14 +95,14 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 					new_eval = comp_eval;
 					alpha = comp_eval;
 					nmove = s;
-					board.undo_move(s, &c);
+					board->undo_move(s, &c);
 					probe->type = -1;
 					break;
 				} // Prune
 				if (probe_m.depth >= ply - 1 &&
 					comp_eval < new_eval &&
 					probe_m.type != 1) {
-					board.undo_move(s, &c);
+					board->undo_move(s, &c);
 					i++;
 					index += step;
 					continue;
@@ -120,10 +123,8 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 					break;
 				}
 
-				comp_eval = -alpha_beta(board, stop,
-					reduction, &probe_m, step,
-					-beta, -alpha
-				);
+				comp_eval = -alpha_beta(sp, &probe_m,
+					reduction, -beta, -alpha);
 
 				//if (comp_eval > alpha && probe_m.type == -1) { throw; }
 
@@ -136,14 +137,14 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 				if (new_eval > alpha) { 
 					alpha = new_eval;
 					if (alpha >= beta) {
-						board.undo_move(s, &c);
+						board->undo_move(s, &c);
 						probe->type = -1;
 						break;
 					}
 				}
 			}
 
-			board.undo_move(s, &c);
+			board->undo_move(s, &c);
 			i++;
 			index += step;
 		}
@@ -151,7 +152,7 @@ int alpha_beta(Position& board, atomic<bool>* stop,
 		if (alpha == alpha_i) { probe->type = 1; }
 
 		if (!(*stop)) {
-			Main_TT.register_entry(root_key, alpha, nmove, ply, probe->type);
+			table->register_entry(root_key, alpha, nmove, ply, probe->type);
 		}
 
 		return alpha;

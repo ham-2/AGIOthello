@@ -83,9 +83,13 @@ void search_start(Thread* t, float time, int max_ply)
 	int window_b = 2 << (EVAL_BITS - 6);
 	int window_c = probe.eval;
 	
+	SearchParams sp = {
+		board, &(Threads.stop), &Main_TT, t->step
+	};
+
 	while (Threads.depth <= max_ply) {
-		window_c = alpha_beta(*board, &(Threads.stop),
-			Threads.depth, &probe, t->step, 
+		window_c = alpha_beta(&sp,
+			&probe, Threads.depth,
 			window_c - window_a,
 			window_c + window_b);
 			
@@ -124,7 +128,7 @@ void search_start(Thread* t, float time, int max_ply)
 	// Print Bestmove
 	Main_TT.probe(board->get_key(), &probe);
 	Threads.acquire_cout();
-	cout << "bestmove " << probe.nmove << endl;
+	std::cout << "bestmove " << probe.nmove << endl;
 	Threads.release_cout();
 
 	// Ponder
@@ -143,8 +147,7 @@ void search_start(Thread* t, float time, int max_ply)
 		TTEntry probe_ponder = {};
 		Main_TT.probe(board->get_key(), &probe_ponder);
 		while (Threads.depth <= max_ply && !Threads.stop) {
-			alpha_beta(*board, &(Threads.stop),
-				Threads.depth, &probe_ponder, t->step);
+			alpha_beta(&sp, &probe_ponder, Threads.depth);
 
 			Main_TT.probe(board->get_key(), &probe_ponder);
 			++Threads.depth;

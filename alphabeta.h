@@ -12,8 +12,14 @@
 
 using namespace std;
 
-int alpha_beta(Position& board, atomic<bool>* stop,
-	int ply, TTEntry* probe, int step,
-	int alpha = EVAL_MIN, int beta = EVAL_MAX);
+struct SearchParams {
+	Position* board;
+	atomic<bool>* stop;
+	TT* table;
+	int step;
+};
+
+int alpha_beta(SearchParams* sp, TTEntry* probe, 
+	int ply, int alpha = EVAL_MIN, int beta = EVAL_MAX);
 
 #endif

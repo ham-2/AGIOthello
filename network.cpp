@@ -86,11 +86,21 @@ void decode_literal(Net* dst, std::string* src) {
 template <typename T, int size>
 void get_minmax(T* addr) {
 	int max = -65536; int min = 65536;
+	int64_t sum = 0; uint64_t suma = 0;
+	int cnt = 0; 
 	for (int i = 0; i < size; i++) {
 		if (addr[i] > max) { max = addr[i]; }
 		if (addr[i] < min) { min = addr[i]; }
+		sum += addr[i];
+		suma += addr[i] > 0 ? addr[i] : -addr[i];
+		if (addr[i] > 124 || addr[i] < -124) {
+			cnt++;
+		}
 	}
-	std::cout << "max " << max << " min " << min << '\n';
+	std::cout << "max " << max << " min " << min <<
+		"\navg " << double(sum) / size << 
+		"\nabs " << double(suma) / size <<
+		"\n124cnt " << cnt << " / " << size << '\n';
 }
 
 void get_stats(Net* net) {
