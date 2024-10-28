@@ -20,11 +20,33 @@ void lazy_smp(Thread* t) {
 		unique_lock<mutex> m(t->m);
 		Threads.t_wait.wait(m);
 
+		Main_TT.probe(t->board->get_key(), &probe);
+		int window_a = 2 << (EVAL_BITS - 6);
+		int window_b = 2 << (EVAL_BITS - 6);
+		int window_c = probe.eval;
+
 		while (!Threads.stop) {
 			currdepth = Threads.depth + 1;
 
-			Main_TT.probe(t->board->get_key(), &probe);
-			alpha_beta(&sp, &probe, currdepth);
+			window_c = alpha_beta(&sp,
+				&probe, currdepth,
+				window_c - window_a,
+				window_c + window_b);
+
+			if (probe.type == 1) {
+				window_a *= 4;
+			}
+			if (probe.type == -1) {
+				window_b *= 4;
+			}
+			if (probe.type == 0) {
+				window_a = 2 << (EVAL_BITS - 6);
+				window_b = 2 << (EVAL_BITS - 6);
+				if (Threads.depth == t->board->get_count_empty()) {
+					window_a += window_c < 0 ? EVAL_END : 0;
+					window_b += window_c > 0 ? EVAL_END : 0;
+				}
+			}
 		}
 	}
 

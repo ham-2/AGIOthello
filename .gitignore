@@ -375,3 +375,5 @@ FodyWeavers.xsd
 /data/aginet
 /dst
 /CppProperties.json
+/gui/AGIOthello.exe
+/gui/weights.bin

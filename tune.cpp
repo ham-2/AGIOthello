@@ -110,7 +110,7 @@ void back_b_(__m256 c, float* d_3, float* d_2,
 		d_2[i] = temp[0] / (1 << shift_2);
 	}
 
-	c = _mm256_mul_ps(c, _mm256_set1_ps(128.0));
+	//c = _mm256_mul_ps(c, _mm256_set1_ps(128.0));
 	for (int i = 0; i < size_2; i += 8) {
 		__m256 d_2_ = _mm256_load_ps(d_2 + i);
 		d_2_ = _mm256_mul_ps(d_2_, c);
