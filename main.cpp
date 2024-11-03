@@ -6,6 +6,7 @@
 
 #include "options.h"
 #include "board.h"
+#include "book.h"
 #include "benchmark.h"
 #include "tune.h"
 #include "movegen.h"
@@ -248,13 +249,8 @@ int main() {
 		}
 
 		else if (word == "encode") {
-			encode_literal(Threads.n);
+			encode_literal((char*)Threads.n, sizeof(Net));
 		}
-
-		//else if (word == "decode") {
-		//	string w[] = { "" };
-		//	decode_literal(Threads.n, w);
-		//}
 
 		else if (word == "stats") {
 			get_stats(Threads.n);
@@ -268,6 +264,26 @@ int main() {
 
 		else if (word == "hashfull") {
 			Main_TT.check_full();
+		}
+
+		else if (word == "buildbook") {
+			ss >> word;
+			int num_threads = stoi(word);
+			ss >> word;
+			bool c = (word == "-c");
+			ss >> word;
+			int depth = stoi(word);
+			thread t = thread(continue_bigbook, num_threads, c, depth);
+			t.detach();
+		}
+
+		else if (word == "viewbook") {
+			ss >> word;
+			view_book(word);
+		}
+
+		else if (word == "prune") {
+			prune_book();
 		}
 	}
 

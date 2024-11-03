@@ -1,12 +1,6 @@
 #ifndef NETWORK_INCLUDED
 #define NETWORK_INCLUDED
 
-#include <cstdint>
-#include <fstream>
-#include <iostream>
-#include <string>
-
-
 #include "board.h"
 #include "misc.h"
 
@@ -49,10 +43,12 @@ inline void zero_weights(Net* net) { memset(net, 0, sizeof(Net)); }
 void rand_weights_all(Net* net, int bits);
 void rand_weights_1(Net* net, int mm);
 
-int load_weights(Net* net, std::string filename);
-void save_weights(Net* net, std::string filename);
-void encode_literal(Net* net);
-void decode_literal(Net* dst, std::string* src);
+inline int load_weights(Net* net, std::string filename) {
+	return load_file((char*)net, filename, sizeof(Net));
+}
+inline void save_weights(Net* net, std::string filename) {
+	return save_file((char*)net, filename, sizeof(Net));
+}
 void get_stats(Net* net);
 
 void compute_L0(int16_t* dst_b, Bitboard* pieces, Net* n);

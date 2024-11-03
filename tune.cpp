@@ -147,7 +147,8 @@ void backpropagate(Net_train* dst, Position* board,
 	int P[SIZE_OUT];
 	int PS;
 
-	float mg = float(board->get_count_empty()) / 64;
+	//float mg = float(board->get_count_empty()) / 64;
+	float mg = 0.5;
 	float eg = 1 - mg;
 
 	float dPdP3R[SIZE_F3];
@@ -276,15 +277,16 @@ int _play_best(Position* board, int find_depth, PBS* p)
 		Square nmove = NULL_MOVE;
 		int comp_eval;
 		int new_eval = EVAL_INIT;
+		int eval_list[33] = {};
 
-		if (find_depth < 0) {
+		if (find_depth < 2) {
 			for (int i = 0; i < legal_moves.length(); i++) {
 				s = legal_moves.list[i];
 				Bitboard c;
 				board->do_move(s, &c);
 				comp_eval = -find_best(*board, find_depth,
 					EVAL_MIN, -new_eval);
-
+				eval_list[i] = comp_eval;
 				if (comp_eval > new_eval) {
 					new_eval = comp_eval;
 					nmove = s;
@@ -295,34 +297,55 @@ int _play_best(Position* board, int find_depth, PBS* p)
 		else {
 			SearchParams sp = { board, &(Threads.stop), p->table, 1 };
 			p->table->increment();
-			TTEntry entry = {};
-			Key root_key = board->get_key();
-			p->table->probe(root_key, &entry);
-			int window_c = is_miss(&entry, root_key) ? 0 : entry.eval;
-			int window_a = 2 << (EVAL_BITS - 6);
-			int window_b = 2 << (EVAL_BITS - 6);
-			do {
-				window_c = alpha_beta(&sp,
-					&entry, find_depth + 1,
-					window_c - window_a,
-					window_c + window_b);
-				if (entry.type == 1) {
-					window_a += 2 << (EVAL_BITS - 6);
-				}
-				if (entry.type == -1) {
-					window_b += 2 << (EVAL_BITS - 6);
-				}
-			} while (entry.type != 0 && !Threads.stop);
-			p->table->probe(root_key, &entry);
+			for (int i = 0; i < legal_moves.length(); i++) {
+				s = legal_moves.list[i];
+				Bitboard c;
+				board->do_move(s, &c);
 
-			if (is_miss(&entry, root_key)) {
-				p->table->clear_entry(root_key);
-				alpha_beta(&sp, &entry, 1);
+				TTEntry entry = {};
+				Key root_key = board->get_key();
 				p->table->probe(root_key, &entry);
-			}
+				int window_c = is_miss(&entry, root_key) ? 0 : entry.eval;
+				int window_a = 2 << (EVAL_BITS - 6);
+				int window_b = 2 << (EVAL_BITS - 6);
+				do {
+					window_c = alpha_beta(&sp,
+						&entry, find_depth,
+						window_c - window_a,
+						window_c + window_b);
+					if (entry.type == 1) {
+						window_a += 2 << (EVAL_BITS - 6);
+					}
+					if (entry.type == -1) {
+						window_b += 2 << (EVAL_BITS - 6);
+					}
+				} while (entry.type != 0 && !Threads.stop);
 
-			nmove = *(legal_moves.list + legal_moves.find_index(entry.nmove));
+				comp_eval = -window_c;
+				eval_list[i] = comp_eval;
+
+				if (comp_eval > new_eval) {
+					new_eval = comp_eval;
+					nmove = s;
+				}
+				board->undo_move(s, &c);
+			}
 		}
+
+		int cumul = 0;
+		for (int i = 0; i < legal_moves.length(); i++) {
+			eval_list[i] = eval_list[i] - new_eval + (2 << (EVAL_BITS - 6));
+			if (eval_list[i] < 0) { eval_list[i] = 0; }
+			eval_list[i] >>= (EVAL_BITS - 9);
+			eval_list[i] = eval_list[i] * eval_list[i];
+			eval_list[i] = eval_list[i] * eval_list[i] * eval_list[i];
+			cumul += eval_list[i];
+			eval_list[i] = cumul;
+		}
+		int movepick = p->r->get() % cumul;
+		int nmove_i = 0;
+		while (eval_list[nmove_i] < movepick) { nmove_i++; }
+		nmove = legal_moves.list[nmove_i];
 
 		Bitboard c;
 		board->do_move(nmove, &c);

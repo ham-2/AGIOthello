@@ -55,6 +55,7 @@ int TT::probe(Key key, TTEntry* probe) {
 
 void TT::register_entry(Key key, int eval, Square move, uint8_t depth, int8_t type) {
 	TTEntry* entry_ptr = table + (key & SIZE_NUM);
+	int r = depth + (type == 0 ? 4 : 0);
 	entry_ptr->m.lock();
 	if (depth >= entry_ptr->depth ||
 		tt_sn > entry_ptr->table_sn) {

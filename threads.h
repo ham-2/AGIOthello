@@ -57,6 +57,8 @@ public:
 	void show(int i);
 	void set_weights();
 	void do_move(Square s);
+	void do_move(Square s, Bitboard* c);
+	void undo_move(Square s, Bitboard* c);
 	inline void do_move(string ms) { do_move(parse_square(ms)); }
 
 	void gen();

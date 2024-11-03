@@ -364,7 +364,6 @@ MigrationBackup/
 FodyWeavers.xsd
 /AGIOthello.vcxproj.filters
 /AGIOthello.vcxproj
-/temp.bin
 /data/train_result.xlsx
 /data/AGIOthello data.txt
 /data/movegen_result.xlsx
@@ -376,4 +375,8 @@ FodyWeavers.xsd
 /dst
 /CppProperties.json
 /gui/AGIOthello.exe
-/gui/weights.bin
+
+# Opening Books and Weights
+/temp.bin
+/weights.bin
+/bigbook.tob

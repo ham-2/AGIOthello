@@ -5,7 +5,7 @@ using namespace std;
 void print_option() {
 	Threads.acquire_cout();
 	cout << "option name Threads type spin default 1 min 1 max " << THREADS_MAX << '\n'
-		<< "option name Hash type spin default 1 min 1 max 64 \n"
+		<< "option name Hash type spin default 1 min 1 max " << HASH_MAX << "\n"
 		<< endl;
 	Threads.release_cout();
 }
@@ -32,7 +32,7 @@ void set_option(istringstream& ss) {
 				if (new_size < 1) { new_size = 1; }
 				else {
 					while ((new_size & (new_size - 1)) != 0) { new_size--; }
-					if (new_size > 64) { new_size = 64; }
+					if (new_size > HASH_MAX) { new_size = HASH_MAX; }
 				}
 				Main_TT.change_size((size_t)(new_size));
 			}

@@ -2,6 +2,10 @@
 #define MISC_INCLUDED
 
 #include <cstdint>
+#include <fstream>
+#include <iostream>
+#include <string>
+
 
 // Macros
 
@@ -44,5 +48,10 @@ public:
 extern PRNG rng;
 
 uint64_t hash_128i(uint64_t upper, uint64_t lower);
+
+int load_file(char* dst, std::string filename, size_t size);
+void save_file(char* src, std::string filename, size_t size);
+void encode_literal(char* src, size_t size);
+void decode_literal(char* dst, std::string* src, size_t size);
 
 #endif

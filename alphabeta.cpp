@@ -51,15 +51,10 @@ int alpha_beta(SearchParams* sp, TTEntry* probe,
 	else {
 		
 		if (ply <= 0) { 
-			//if (is_mate(alpha) || is_mate(beta)) {
-			//	ply = 1;
-			//}
-			//else {
-				probe->type = 0;
-				int score = eval(*board);
-				table->register_entry(root_key, score, SQ_END, 0, 0);
-				return score;
-			//}
+			probe->type = 0;
+			int score = eval(*board);
+			table->register_entry(root_key, score, SQ_END, 0, 0);
+			return score;
 		}
 
 		Square s;

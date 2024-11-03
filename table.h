@@ -29,7 +29,7 @@ struct TTEntry {
 	uint16_t table_sn;
 	uint8_t depth;
 	int8_t type; // 0: pv 1: upper -1: lower
-	int pad;
+	int rep_int;
 	spinlock m;
 };
 
@@ -49,7 +49,7 @@ struct TT {
 	void clear_entry(Key key);
 	void clear();
 	void change_size(size_t new_size);
-	void increment() { tt_sn++; }
+	void increment() { tt_sn++; if (tt_sn == 65535) { clear(); } }
 
 	void check_full();
 };

@@ -7,10 +7,10 @@
 #include "table.h"
 #include "threads.h"
 
-using namespace std;
+constexpr int HASH_MAX = 1024;
 
 void print_option();
 
-void set_option(istringstream& ss);
+void set_option(std::istringstream& ss);
 
 #endif

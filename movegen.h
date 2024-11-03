@@ -5,7 +5,7 @@
 #include "position.h"
 
 struct MoveList {
-	Square list[256];
+	Square list[64];
 	Square* end;
 
 	Bitboard b;

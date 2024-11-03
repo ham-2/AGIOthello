@@ -162,6 +162,36 @@ void Threadmgr::do_move(Square m) {
 	}
 }
 
+void Threadmgr::do_move(Square m, Bitboard* c) {
+	if (m == NULL_MOVE) {
+		board->pass();
+		for (int i = 0; i < threads.size(); i++) {
+			threads[i]->board->pass();
+		}
+	}
+	else {
+		board->do_move(m, c);
+		for (int i = 0; i < threads.size(); i++) {
+			threads[i]->board->do_move(m, c);
+		}
+	}
+}
+
+void Threadmgr::undo_move(Square m, Bitboard* c) {
+	if (m == NULL_MOVE) {
+		board->pass();
+		for (int i = 0; i < threads.size(); i++) {
+			threads[i]->board->pass();
+		}
+	}
+	else {
+		board->undo_move(m, c);
+		for (int i = 0; i < threads.size(); i++) {
+			threads[i]->board->undo_move(m, c);
+		}
+	}
+}
+
 void Threadmgr::test_eval() {
 	int endeval = eval(*board);
 

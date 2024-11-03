@@ -4,6 +4,7 @@ import asyncio
 import subprocess
 import sys
 import queue
+import time
 
 from typing import Type, TypeVar, Tuple, Union
 
@@ -51,7 +52,7 @@ class UCIProtocol(asyncio.SubprocessProtocol):
             self.lines.put(line)
 
     def pipe_connection_lost(self, fd: int, exc) -> None:
-        print('closed' + fd)
+        print('closed' + str(fd))
 
     def process_exited(self, fd: int, exc) -> None:
         print('closed')
@@ -75,12 +76,13 @@ class OthelloGame:
         ''' Initialize all of the games settings and creates the board. '''
         self.rows = 8
         self.cols = 8
-        self.current_board = self._new_game_board(8, 8, 'W')
+        self.current_board = self._new_game_board()
         self.turn = 'B'
 
         # Engine Analysis
         self._threads = 1
         self._hash = 1
+        self._running = False
         self._depth = 0
         self._move = '00'
         self._score = +0.0
@@ -89,39 +91,51 @@ class OthelloGame:
         self._nodes = 0
         self._nps = 0.0
 
+        # History
+        self._history = []
+        self._history_pos = 0
+
+        # Play
+        self._playing = False
+        self._wtime = 0
+        self._btime = 0
+        self._winc = 0
+        self._binc = 0
+        self._side = 'B'
+        self._result = ''
+
     async def start(self):
         (self.transport, self.uci) = await self._open_engine()
         self.new_game()
 
     def new_game(self):
-        self.current_board = self._new_game_board(8, 8, 'W')
+        self._new_game_board()
+        self.clear_history()
+        self._send_engine('position startpos')
+
+    def _new_game_board(self):
+        board = []
+
+        # Create an empty board
+        for row in range(8):
+            board.append([])
+            for col in range(8):
+                board[-1].append(NONE)
+
+        # Initialize the 4 game pieces in the center
+        board[3][3] = 'W'
+        board[3][4] = 'B'
+        board[4][3] = 'B'
+        board[4][4] = 'W'
+        
+        self.current_board = board
         self.turn = 'B'
         self._depth = 0
         self._move = '00'
         self._score = +0.0
         self._pv = ''
+        self._result = ''
         self._mate = False
-        self._send_engine('stop')
-        self._send_engine('position startpos')
-        self._send_engine('go infinite')
-
-    def _new_game_board(self, rows: int, cols: int, top_left: str) -> [[str]]:
-        ''' Creates the Othello Game board with specified dimensions. '''
-        board =[]
-
-        # Create an empty board
-        for row in range(rows):
-            board.append([])
-            for col in range(cols):
-                board[-1].append(NONE)
-
-        # Initialize the 4 game pieces in the center
-        board[rows // 2 - 1][cols // 2 - 1] = top_left
-        board[rows // 2 - 1][cols // 2] = self._opposite_turn(top_left)
-        board[rows // 2][cols // 2 - 1] = self._opposite_turn(top_left)
-        board[rows // 2][cols // 2] = top_left
-        
-        return board
 
     async def _open_engine(self) -> Tuple[asyncio.SubprocessTransport, UCIProtocol]:
         return await asyncio.get_running_loop().subprocess_exec(
@@ -136,11 +150,26 @@ class OthelloGame:
     def _make_move(self, row, col):
         return chr(ord('a') + col) + chr(ord('1') + row)
 
+    def _to_rowcol(self, movestr):
+        return (ord(movestr[1]) - ord('1'), ord(movestr[0]) - ord('a'))
+
     def stop_analysis(self):
+        self._running = False
         self._send_engine("stop")
 
     def resume_analysis(self):
-        self._send_engine("go infinite")
+        self._running = True
+        if self._playing and self.turn != self._side:
+            self._send_engine("go wtime " + str(int(self._wtime)) + \
+                              " btime " + str(int(self._btime)) + \
+                              " winc " + str(int(self._winc)) + \
+                              " binc " + str(int(self._binc)))
+            if self._side == 'B':
+                self._wtime += 75
+            else:
+                self._btime += 75
+        elif not self._playing:
+            self._send_engine("go infinite")
 
     def set_option(self, name: str, value: int):
         self._send_engine("setoption name " + name + " value " + str(value))
@@ -197,13 +226,28 @@ class OthelloGame:
             if self.can_move(next_turn):
                 self.switch_turn()
                 self._send_engine('moves ' + self._make_move(row, col))
-                self._send_engine('go infinite')
-            else:
+                self._history.append(self._make_move(row, col))
+            elif self.can_move(self.turn):
                 self._send_engine('moves ' + self._make_move(row, col) + ' 00')
-                self._send_engine('go infinite')
+                self._history.append(self._make_move(row, col))
+                self._history.append('00')
+            else:
+                self._material_end()
+
+            if self._running : self.resume_analysis()
         else:
             raise InvalidMoveException()
 
+    def _material_end(self):
+        #self._playing = False
+        black_cnt = self.get_total_cells('B');
+        white_cnt = self.get_total_cells('W')
+        if black_cnt > white_cnt:
+            self._result = '1-0'
+        elif black_cnt == white_cnt:
+            self._result = '1/2-1/2'
+        else:
+            self._result = '0-1'
 
     def _is_valid_directional_move(self, row: int, col: int, rowdelta: int, coldelta: int, turn: str) -> bool:
         ''' Given a move at specified row/col, checks in the given direction to see if
@@ -311,6 +355,11 @@ class OthelloGame:
         ''' Switches the player's turn from the current one to
             the other. Only to be called if the current player
             cannot move at all. '''
+        if self._playing:
+            if self.turn == 'B':
+                self._btime += self._binc
+            else:
+                self._wtime += self._winc
         self.turn = self._opposite_turn(self.turn)
 
     def get_board(self) -> [[str]]:
@@ -407,3 +456,90 @@ class OthelloGame:
 
             elif tokens[0] == 'bestmove':
                 self._move = tokens[1]
+                if self._playing:
+                    self.do_move(tokens[1])
+                    self._send_engine('moves ' + tokens[1])
+                    self._history.append(tokens[1])
+                    if not self.can_move(self.turn):
+                        self.switch_turn()
+                        if self.can_move(self.turn):
+                            self._send_engine('moves 00')
+                            self._history.append('00')
+                            self.resume_analysis()
+                        else:
+                            self._material_end()
+
+    def do_move(self, move):
+        row, col = self._to_rowcol(move)
+        possible_directions = self._adjacent_opposite_color_directions(row, col, self.turn)
+        next_turn = self._opposite_turn(self.turn)
+        for direction in possible_directions:      
+            self._convert_adjacent_cells_in_direction(row, col, direction[0], direction[1], self.turn)
+        self.current_board[row][col] = self.turn
+        self.switch_turn()
+
+    def _redo_history(self):
+        self._new_game_board()
+        self._send_engine('position startpos')
+        line = 'moves '
+        for move in self._history:
+            line += move + ' '
+            if move == '00': continue
+            self.do_move(move)
+            if not self.can_move(self.turn):
+                self.switch_turn()
+        self._send_engine(line)
+        
+    def clear_history(self):
+        self._history.clear()
+
+    def get_lastmove(self):
+        if self._history:
+            return self._to_rowcol(self._history[-1])
+        else:
+            return (-1, -1)
+
+    def undo_move(self):
+        if not self._history: return
+        resume = self._running
+        self.stop_analysis()
+        if self._history.pop(-1) == '00' and self._history:
+            self._history.pop(-1)
+        self._redo_history()
+        if resume: self.resume_analysis()
+        
+    def set_game_info(self, time, inc, side, limittime):
+        self._wtime = time
+        self._btime = time
+        self._winc = inc
+        self._binc = inc
+        self._side = side
+        self._limittime = limittime
+        
+    def set_clock(self):
+        self._time_last = time.time_ns() // 1e6
+        
+    def update_clock(self):
+        time_now = time.time_ns() // 1e6;
+        
+        if self.turn == 'B':
+            self._btime -= time_now - self._time_last
+        else:
+            self._wtime -= time_now - self._time_last
+        
+        self._time_last = time_now
+        
+        if self._btime < 0 :
+            self._btime = 0
+            if self._side == 'W' or self._limittime:
+                self._playing = False
+                self._result = '0-1'
+        if self._wtime < 0 :
+            self._wtime = 0
+            if self._side == 'B' or self._limittime:
+                self._playing = False
+                self._result = '1-0'
+        return (self._wtime, self._btime)
+
+    def game_ended(self):
+        return self._result != ''

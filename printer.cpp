@@ -51,7 +51,7 @@ void printer(float time, atomic<bool>* stop, condition_variable* cv)
 		// Print
 		Threads.acquire_cout();
 		cout << "info time " << search_time.count() << " depth " << Threads.depth
-			<< " currmove " << move(probe.nmove) << " score " << eval_print(probe.eval)
+			<< " currmove " << probe.nmove << " score " << eval_print(probe.eval)
 			<< " nodes " << nodes << " nps " << int(double(nodes * 1000) / (1 + search_time.count()))
 			<< " pv " << buf.str() << endl;
 		Threads.release_cout();
